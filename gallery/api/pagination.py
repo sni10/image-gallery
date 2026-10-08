@@ -19,6 +19,31 @@ class PageLimitPagination(BasePagination):
     def get_paginated_response(self, data):
         return Response({'items': data, 'total': self.total})
 
+    # OpenAPI (drf-spectacular): query params and the {items, total} envelope
+    def get_schema_operation_parameters(self, view):
+        return [
+            {
+                'name': 'page', 'in': 'query', 'required': False,
+                'description': 'Номер страницы, с 1. Страница за пределами total вернёт пустой items.',
+                'schema': {'type': 'integer', 'minimum': 1, 'default': 1},
+            },
+            {
+                'name': 'limit', 'in': 'query', 'required': False,
+                'description': f'Размер страницы. Больше {self.max_limit} обрезается до {self.max_limit}.',
+                'schema': {'type': 'integer', 'minimum': 1, 'default': self.default_limit},
+            },
+        ]
+
+    def get_paginated_response_schema(self, schema):
+        return {
+            'type': 'object',
+            'required': ['items', 'total'],
+            'properties': {
+                'items': schema,
+                'total': {'type': 'integer', 'description': 'Сколько всего записей, без учёта пагинации'},
+            },
+        }
+
     @staticmethod
     def _positive_int(request, name, default):
         try:

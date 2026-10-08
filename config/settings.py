@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'drf_spectacular',
     'corsheaders',
     'gallery',
 ]
@@ -141,3 +142,16 @@ MEDIA_URL = ENV.media.url
 MEDIA_ROOT = BASE_DIR / ENV.media.root  # an absolute MEDIA_ROOT replaces BASE_DIR
 
 CORS_ALLOWED_ORIGINS = ENV.cors.allowed_origins
+
+REST_FRAMEWORK = {
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'DEFAULT_AUTHENTICATION_CLASSES': [],  # public read-only API; the admin uses Django sessions on its own
+}
+
+# OpenAPI spec: /api/schema/ (YAML), /api/docs/ (Swagger UI), /api/redoc/; file: manage.py spectacular
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Image Gallery API',
+    'DESCRIPTION': 'Галереи и фото. Только чтение, без авторизации. Картинки отдаются по абсолютным URL из /media/.',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+}
