@@ -22,7 +22,7 @@ class GalleryAdmin(admin.ModelAdmin):
 
     def get_changelist_instance(self, request):
         changelist = super().get_changelist_instance(request)
-        GalleryQueries.attach_covers(changelist.result_list)
+        GalleryQueries.attach_covers(changelist.result_list, request.user)
         return changelist
 
     def save_model(self, request, obj, form, change):

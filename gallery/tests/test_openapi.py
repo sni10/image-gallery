@@ -4,21 +4,43 @@ import yaml
 from django.core.management import call_command
 from django.test import SimpleTestCase, TestCase
 
+PATHS = {
+    '/photos', '/galleries', '/galleries/{id}', '/galleries/{id}/photos',
+    '/auth/register', '/auth/confirm-email', '/auth/resend-confirmation', '/auth/login', '/auth/refresh',
+    '/auth/logout', '/auth/confirm-email-change', '/me', '/me/email', '/me/password',
+    '/me/favorites', '/me/favorites/{photo_id}',
+}
+
 
 class OpenApiSchemaTest(SimpleTestCase):
-    def test_schema_is_valid_and_matches_contract(self):
+    def setUp(self):
         out = StringIO()
         call_command('spectacular', '--validate', '--fail-on-warn', stdout=out)  # raises on warnings
-        schema = yaml.safe_load(out.getvalue())
+        self.schema = yaml.safe_load(out.getvalue())
 
-        self.assertLessEqual({'/photos', '/galleries', '/galleries/{id}', '/galleries/{id}/photos'}, set(schema['paths']))
-        self.assertEqual(set(schema['paths']['/galleries/{id}/photos']['get']['responses']), {'200', '400', '404'})
+    def responses(self, path, method):
+        return set(self.schema['paths'][path][method]['responses'])
+
+    def test_gallery_contract(self):
+        schema = self.schema
+        self.assertEqual(set(schema['paths']), PATHS)
+        self.assertEqual(self.responses('/galleries/{id}/photos', 'get'), {'200', '400', '404'})
         page = schema['components']['schemas']['PaginatedGalleryList']
         self.assertEqual(page['required'], ['items', 'total'])
         photo = schema['components']['schemas']['Photo']['properties']
         self.assertEqual(photo['url']['format'], 'uri')
+        self.assertEqual(photo['isFavorite']['type'], 'boolean')
         self.assertTrue(schema['components']['schemas']['Gallery']['properties']['cover']['nullable'])
-        self.assertEqual(schema['components']['securitySchemes']['bearerAuth'], {'type': 'http', 'scheme': 'bearer', 'bearerFormat': 'JWT'})
+
+    def test_auth_contract(self):
+        self.assertEqual(self.schema['components']['securitySchemes']['bearerAuth'],
+                         {'type': 'http', 'scheme': 'bearer', 'bearerFormat': 'JWT'})
+        self.assertEqual(self.responses('/auth/login', 'post'), {'200', '401', '403', '429'})
+        self.assertEqual(self.responses('/me/password', 'post'), {'200', '400', '401', '429'})
+        self.assertEqual(self.responses('/me/favorites/{photo_id}', 'put'), {'204', '401', '404'})
+        login_body = self.schema['paths']['/auth/login']['post']['requestBody']['content']['application/json']
+        self.assertEqual(login_body['schema']['$ref'], '#/components/schemas/Login')
+        self.assertEqual(set(self.schema['components']['schemas']['TokenPair']['required']), {'access', 'refresh'})
 
 
 class OpenApiPagesTest(TestCase):

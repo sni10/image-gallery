@@ -6,7 +6,7 @@ from ..models import Gallery
 from ..services import PhotoService
 from .utils import gallery, jpeg
 
-PHOTO_KEYS = {'id', 'title', 'url', 'thumbUrl', 'width', 'height'}
+PHOTO_KEYS = {'id', 'title', 'url', 'thumbUrl', 'width', 'height', 'isFavorite'}
 
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())

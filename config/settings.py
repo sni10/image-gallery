@@ -172,7 +172,12 @@ REST_FRAMEWORK = {
 # OpenAPI spec: /api/schema/ (YAML), /api/docs/ (Swagger UI), /api/redoc/; file: manage.py spectacular
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Image Gallery API',
-    'DESCRIPTION': 'Галереи и фото. Только чтение, без авторизации. Картинки отдаются по абсолютным URL из /media/.',
+    'DESCRIPTION': (
+        'Галереи, фото, аккаунты и избранное. Картинки отдаются по абсолютным URL из /media/.\n\n'
+        'Авторизация: `Authorization: Bearer <access>` (access из /auth/login, /auth/confirm-email, /auth/refresh; '
+        'живёт 15 минут). Публичные эндпоинты работают и без заголовка, но с просроченным или неверным '
+        'токеном любой эндпоинт отвечает 401 — обновите токен через /auth/refresh или уберите заголовок.'
+    ),
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
 }

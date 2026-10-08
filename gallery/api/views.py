@@ -2,11 +2,15 @@ import re
 
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
-from rest_framework.exceptions import ValidationError
+from rest_framework import status
+from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.generics import ListAPIView, RetrieveAPIView
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from ..models import Gallery, Photo
-from ..services import GalleryQueries, PhotoQueries
+from ..services import FavoriteService, GalleryQueries, PhotoQueries
 from .pagination import PageLimitPagination
 from .serializers import GallerySerializer, PhotoSerializer
 
@@ -29,7 +33,7 @@ class GalleryListView(ListAPIView):
         return GalleryQueries.with_stats()
 
     def paginate_queryset(self, queryset):
-        return GalleryQueries.attach_covers(super().paginate_queryset(queryset))
+        return GalleryQueries.attach_covers(super().paginate_queryset(queryset), self.request.user)
 
 
 @extend_schema(summary='Галерея', responses={200: GallerySerializer, 404: NOT_FOUND})
@@ -40,7 +44,7 @@ class GalleryDetailView(RetrieveAPIView):
         return GalleryQueries.with_stats()
 
     def get_object(self):
-        return GalleryQueries.attach_covers([super().get_object()])[0]
+        return GalleryQueries.attach_covers([super().get_object()], self.request.user)[0]
 
 
 @extend_schema(
@@ -62,7 +66,7 @@ class RandomPhotoListView(ListAPIView):
         seed = self.request.query_params.get('seed', '')
         if not SEED_RE.fullmatch(seed):
             raise ValidationError({'seed': 'required, 1-32 latin letters or digits'})
-        return PhotoQueries.shuffled(seed)
+        return PhotoQueries.with_is_favorite(PhotoQueries.shuffled(seed), self.request.user)
 
 
 @extend_schema(
@@ -77,4 +81,48 @@ class GalleryPhotoListView(ListAPIView):
     def get_queryset(self):
         if getattr(self, 'swagger_fake_view', False):  # schema generation: no real request
             return Photo.objects.none()
-        return get_object_or_404(Gallery, pk=self.kwargs['pk']).photos.all()
+        photos = get_object_or_404(Gallery, pk=self.kwargs['pk']).photos.all()
+        return PhotoQueries.with_is_favorite(photos, self.request.user)
+
+
+UNAUTHORIZED = OpenApiResponse(description='Нет действующего access-токена')
+
+
+@extend_schema(
+    summary='Избранное текущего пользователя',
+    description='Сначала недавно добавленные. Пагинация как у остальных списков.',
+    responses={200: PhotoSerializer(many=True), 400: BAD_PARAMS, 401: UNAUTHORIZED},
+)
+class FavoriteListView(ListAPIView):
+    serializer_class = PhotoSerializer
+    pagination_class = PageLimitPagination
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):  # schema generation: no real user
+            return Photo.objects.none()
+        return PhotoQueries.with_is_favorite(PhotoQueries.favorites_of(self.request.user), self.request.user)
+
+
+class FavoriteView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary='Добавить фото в избранное', request=None,
+        responses={204: OpenApiResponse(description='Добавлено (или уже было)'), 401: UNAUTHORIZED,
+                   404: OpenApiResponse(description='Фото с таким id нет')},
+    )
+    def put(self, request, photo_id):
+        try:
+            FavoriteService.add(request.user, photo_id)
+        except Photo.DoesNotExist:
+            raise NotFound('Фото не найдено.')
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @extend_schema(
+        summary='Убрать фото из избранного',
+        responses={204: OpenApiResponse(description='Убрано (или его и не было)'), 401: UNAUTHORIZED},
+    )
+    def delete(self, request, photo_id):
+        FavoriteService.remove(request.user, photo_id)
+        return Response(status=status.HTTP_204_NO_CONTENT)

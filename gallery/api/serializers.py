@@ -13,10 +13,13 @@ class PhotoSerializer(serializers.ModelSerializer):
     thumbUrl = serializers.SerializerMethodField(
         method_name='get_thumb_url', help_text='Превью WebP, не больше 400px по длинной стороне, абсолютная ссылка',
     )
+    isFavorite = serializers.BooleanField(
+        source='is_favorite', read_only=True, help_text='В избранном у текущего пользователя; для анонима всегда false',
+    )
 
     class Meta:
         model = Photo
-        fields = ['id', 'title', 'url', 'thumbUrl', 'width', 'height']
+        fields = ['id', 'title', 'url', 'thumbUrl', 'width', 'height', 'isFavorite']
         extra_kwargs = {
             'title': {'help_text': 'Название; если не задано — имя загруженного файла'},
             'width': {'help_text': 'Ширина оригинала в px с учётом поворота по EXIF'},

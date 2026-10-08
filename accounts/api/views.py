@@ -20,6 +20,7 @@ from .serializers import (
 )
 
 UNAUTHORIZED = OpenApiResponse(description='Нет действующего access-токена')
+THROTTLED = OpenApiResponse(description='Больше 10 запросов в минуту с одного IP')
 
 BAD_LINK = 'Ссылка недействительна или устарела.'
 
@@ -47,7 +48,7 @@ class RegisterView(AuthThrottled):
 
     @extend_schema(
         summary='Регистрация', request=RegisterSerializer,
-        responses={201: RegisteredSerializer, 400: OpenApiResponse(description='Ошибки по полям email/password')},
+        responses={429: THROTTLED, 201: RegisteredSerializer, 400: OpenApiResponse(description='Ошибки по полям email/password')},
     )
     def post(self, request):
         user = self.registration.register(**validated(RegisterSerializer, request))
@@ -60,7 +61,7 @@ class ConfirmEmailView(AuthThrottled):
 
     @extend_schema(
         summary='Подтверждение email по ссылке из письма', request=TokenSerializer,
-        responses={200: TokenPairSerializer, 400: OpenApiResponse(description='Ссылка недействительна или устарела')},
+        responses={429: THROTTLED, 200: TokenPairSerializer, 400: OpenApiResponse(description='Ссылка недействительна или устарела')},
     )
     def post(self, request):
         try:
@@ -76,7 +77,7 @@ class ResendConfirmationView(AuthThrottled):
 
     @extend_schema(
         summary='Повторно отправить письмо подтверждения', request=EmailSerializer,
-        responses={204: OpenApiResponse(description='Всегда, даже если аккаунта нет — не раскрывает, кто зарегистрирован')},
+        responses={429: THROTTLED, 204: OpenApiResponse(description='Всегда, даже если аккаунта нет — не раскрывает, кто зарегистрирован')},
     )
     def post(self, request):
         self.registration.resend_confirmation(validated(EmailSerializer, request)['email'])
@@ -89,7 +90,7 @@ class LoginView(AuthThrottled):
 
     @extend_schema(
         summary='Вход', request=LoginSerializer,
-        responses={
+        responses={429: THROTTLED, 
             200: TokenPairSerializer,
             401: OpenApiResponse(description='Неверный email или пароль (одинаково для обоих случаев)'),
             403: OpenApiResponse(description='{"detail": "...", "code": "email_not_confirmed"}'),
@@ -183,7 +184,7 @@ class ChangePasswordView(AuthThrottled):
 
     @extend_schema(
         summary='Сменить пароль', request=ChangePasswordSerializer,
-        responses={
+        responses={429: THROTTLED, 
             200: OpenApiResponse(TokenPairSerializer, description='Новая пара; все прежние refresh-токены отозваны'),
             400: OpenApiResponse(description='Ошибки по полям currentPassword/newPassword'),
             401: UNAUTHORIZED,
