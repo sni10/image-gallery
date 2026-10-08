@@ -10,9 +10,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from ..models import Gallery, Photo
-from ..services import FavoriteService, GalleryQueries, PhotoQueries
+from ..services import CategoryQueries, FavoriteService, GalleryQueries, PhotoQueries
 from .pagination import PageLimitPagination
-from .serializers import GallerySerializer, PhotoSerializer
+from .serializers import CategoryWithCountSerializer, GallerySerializer, PhotoSerializer
 
 SEED_RE = re.compile(r'^[A-Za-z0-9]{1,32}$')
 
@@ -21,8 +21,25 @@ NOT_FOUND = OpenApiResponse(description='Галереи с таким id нет'
 
 
 @extend_schema(
+    summary='Категории',
+    description='Только категории, где есть хотя бы одна галерея, в порядке, заданном в админке. Без пагинации.',
+    responses={200: CategoryWithCountSerializer(many=True)},
+)
+class CategoryListView(ListAPIView):
+    serializer_class = CategoryWithCountSerializer
+    pagination_class = None
+
+    def get_queryset(self):
+        return CategoryQueries.non_empty()
+
+
+@extend_schema(
     summary='Каталог галерей',
     description='Сначала новые. Обложка — выбранная в админке, иначе случайное фото галереи (новое при каждом запросе).',
+    parameters=[OpenApiParameter(
+        'category', str, required=False,
+        description='slug категории из GET /categories: только её галереи. Неизвестный slug — пустой список.',
+    )],
     responses={200: GallerySerializer(many=True), 400: BAD_PARAMS},
 )
 class GalleryListView(ListAPIView):
@@ -30,7 +47,9 @@ class GalleryListView(ListAPIView):
     pagination_class = PageLimitPagination
 
     def get_queryset(self):
-        return GalleryQueries.with_stats()
+        galleries = GalleryQueries.with_stats()
+        category = self.request.query_params.get('category')
+        return galleries.filter(category__slug=category) if category else galleries
 
     def paginate_queryset(self, queryset):
         return GalleryQueries.attach_covers(super().paginate_queryset(queryset), self.request.user)

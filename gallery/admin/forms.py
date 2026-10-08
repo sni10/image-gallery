@@ -39,7 +39,7 @@ class GalleryAdminForm(forms.ModelForm):
 
     class Meta:
         model = Gallery
-        fields = ['title']
+        fields = ['title', 'category']
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

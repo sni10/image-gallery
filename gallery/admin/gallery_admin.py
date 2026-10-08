@@ -11,9 +11,10 @@ from .forms import GalleryAdminForm
 @admin.register(Gallery)
 class GalleryAdmin(admin.ModelAdmin):
     form = GalleryAdminForm
-    fields = ['title', 'new_images']  # the photo grid is rendered by the change_form template
-    list_display = ['id', 'cover_preview', 'title', 'photos_count', 'created_at']
+    fields = ['title', 'category', 'new_images']  # the photo grid is rendered by the change_form template
+    list_display = ['id', 'cover_preview', 'title', 'category', 'photos_count', 'created_at']
     list_display_links = ['id', 'cover_preview', 'title']
+    list_filter = ['category']
     search_fields = ['title']
     photo_service = PhotoService()
 

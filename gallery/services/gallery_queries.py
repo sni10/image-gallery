@@ -20,7 +20,7 @@ class GalleryQueries:
         photos_count = (
             Photo.objects.filter(gallery=OuterRef('pk')).order_by().values('gallery').annotate(n=Count('pk')).values('n')
         )
-        return Gallery.objects.annotate(
+        return Gallery.objects.select_related('category').annotate(
             photos_count=Coalesce(Subquery(photos_count), 0),
             display_cover_id=Coalesce(Subquery(chosen_cover), Subquery(random_photo)),
         )

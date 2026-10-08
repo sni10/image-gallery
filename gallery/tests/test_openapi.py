@@ -5,7 +5,7 @@ from django.core.management import call_command
 from django.test import SimpleTestCase, TestCase
 
 PATHS = {
-    '/photos', '/galleries', '/galleries/{id}', '/galleries/{id}/photos',
+    '/photos', '/categories', '/galleries', '/galleries/{id}', '/galleries/{id}/photos',
     '/auth/register', '/auth/confirm-email', '/auth/resend-confirmation', '/auth/login', '/auth/refresh',
     '/auth/logout', '/auth/confirm-email-change', '/me', '/me/email', '/me/password',
     '/me/favorites', '/me/favorites/{photo_id}',
@@ -31,6 +31,13 @@ class OpenApiSchemaTest(SimpleTestCase):
         self.assertEqual(photo['url']['format'], 'uri')
         self.assertEqual(photo['isFavorite']['type'], 'boolean')
         self.assertTrue(schema['components']['schemas']['Gallery']['properties']['cover']['nullable'])
+        self.assertIn('category', schema['components']['schemas']['Gallery']['required'])
+        catalog_params = {p['name'] for p in schema['paths']['/galleries']['get']['parameters']}
+        self.assertEqual(catalog_params, {'page', 'limit', 'category'})
+        categories = schema['paths']['/categories']['get']['responses']['200']['content']['application/json']['schema']
+        self.assertEqual(categories['type'], 'array')  # not paginated
+        self.assertEqual(set(schema['components']['schemas']['CategoryWithCount']['required']),
+                         {'id', 'slug', 'title', 'galleriesCount'})
 
     def test_auth_contract(self):
         self.assertEqual(self.schema['components']['securitySchemes']['bearerAuth'],

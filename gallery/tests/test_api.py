@@ -31,7 +31,8 @@ class GalleryApiTest(TestCase):
 
     def test_empty_gallery_has_null_cover(self):
         data = self.client.get('/galleries?page=2&limit=2').json()
-        self.assertEqual(data['items'], [{'id': str(self.empty.pk), 'title': 'Empty', 'photosCount': 0, 'cover': None}])
+        self.assertEqual(data['items'], [{'id': str(self.empty.pk), 'title': 'Empty', 'photosCount': 0, 'cover': None,
+                           'category': {'id': str(self.empty.category_id), 'slug': 'test', 'title': 'Test'}}])
 
     def test_page_past_end_is_empty(self):
         self.assertEqual(self.client.get('/galleries?page=99').json(), {'items': [], 'total': 3})

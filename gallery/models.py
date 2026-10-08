@@ -3,8 +3,30 @@ from django.core.exceptions import ValidationError
 from django.db import models
 
 
+class Category(models.Model):
+    """Section of the catalog (AI, comics, ...). Every gallery belongs to exactly one category."""
+
+    title = models.CharField(max_length=100)
+    slug = models.SlugField(unique=True, help_text='Для адреса: латиница, цифры, дефис (например ai, comics)')
+    position = models.IntegerField(default=0, help_text='Порядок в списке категорий: меньше — выше')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['position', 'title']
+        verbose_name_plural = 'categories'
+
+    def __str__(self):
+        return self.title
+
+    def clean(self):
+        self.slug = self.slug.lower()  # SlugField accepts upper case; addresses are lower case
+
+
 class Gallery(models.Model):
     title = models.CharField(max_length=200)
+    category = models.ForeignKey(
+        Category, on_delete=models.PROTECT, related_name='galleries', verbose_name='Категория',
+    )
     cover = models.ForeignKey(
         'Photo', null=True, blank=True, on_delete=models.SET_NULL, related_name='+',
         verbose_name='Обложка', help_text='Если не выбрана — случайное фото галереи при каждом запросе',

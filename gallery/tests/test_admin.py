@@ -21,7 +21,7 @@ class GalleryAdminTest(TestCase):
         self.url = f'/admin/gallery/gallery/{self.gallery.pk}/change/'
 
     def post(self, **data):
-        return self.client.post(self.url, {'title': 'Main', **data})
+        return self.client.post(self.url, {'title': 'Main', 'category': self.gallery.category_id, **data})
 
     def test_photo_section_removed(self):
         self.assertEqual(self.client.get('/admin/gallery/photo/').status_code, 404)
@@ -41,7 +41,8 @@ class GalleryAdminTest(TestCase):
 
     def test_create_gallery_with_upload(self):
         files = [jpeg(4000, 3000, 'x.jpg'), jpeg(600, 800, 'y.jpg')]
-        r = self.client.post('/admin/gallery/gallery/add/', {'title': 'New', 'new_images': files})
+        r = self.client.post('/admin/gallery/gallery/add/',
+                             {'title': 'New', 'category': self.gallery.category_id, 'new_images': files})
         self.assertEqual(r.status_code, 302)
         new = Gallery.objects.get(title='New')
         self.assertEqual(sorted(new.photos.values_list('title', flat=True)), ['x', 'y'])

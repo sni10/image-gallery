@@ -2,7 +2,7 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from ..models import Gallery, Photo
+from ..models import Category, Gallery, Photo
 
 
 class PhotoSerializer(serializers.ModelSerializer):
@@ -38,11 +38,29 @@ class PhotoSerializer(serializers.ModelSerializer):
         return self.context['request'].build_absolute_uri(file.url)
 
 
+class CategorySerializer(serializers.ModelSerializer):
+    id = serializers.CharField(read_only=True, help_text='Числовой id в виде строки')
+
+    class Meta:
+        model = Category
+        fields = ['id', 'slug', 'title']
+        extra_kwargs = {'slug': {'help_text': 'Для адреса и фильтра GET /galleries?category=<slug>'}}
+
+
+class CategoryWithCountSerializer(CategorySerializer):
+    galleriesCount = serializers.IntegerField(source='galleries_count', read_only=True,
+                                              help_text='Сколько галерей в категории, всегда больше 0')
+
+    class Meta(CategorySerializer.Meta):
+        fields = [*CategorySerializer.Meta.fields, 'galleriesCount']
+
+
 class GallerySerializer(serializers.ModelSerializer):
     """Expects galleries from GalleryQueries.with_stats() with covers attached."""
 
     id = serializers.CharField(read_only=True, help_text='Числовой id в виде строки')
     photosCount = serializers.IntegerField(source='photos_count', read_only=True, help_text='Сколько фото в галерее')
+    category = CategorySerializer(read_only=True, help_text='Категория галереи, всегда заполнена')
     cover = PhotoSerializer(
         source='display_cover', read_only=True, allow_null=True,
         help_text='Выбранная обложка, иначе случайное фото галереи; null, если фото нет',
@@ -50,4 +68,4 @@ class GallerySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Gallery
-        fields = ['id', 'title', 'photosCount', 'cover']
+        fields = ['id', 'title', 'category', 'photosCount', 'cover']
