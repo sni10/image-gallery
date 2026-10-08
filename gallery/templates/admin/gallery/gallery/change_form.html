@@ -1,0 +1,46 @@
+{% extends "admin/change_form.html" %}
+{% block extrastyle %}{{ block.super }}
+<style>
+  .photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; padding: 10px; }
+  .photo-grid__item { display: flex; flex-direction: column; gap: 4px; padding: 6px; border: 2px solid var(--hairline-color); border-radius: 6px; }
+  .photo-grid__item:has(input[name="cover"]:checked) { border-color: var(--primary); }
+  .photo-grid__item:has(input[name="selected"]:checked) { background: var(--selected-row); }
+  .photo-grid__item img, .photo-grid__random { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 4px; }
+  .photo-grid__random { display: grid; place-items: center; background: var(--darkened-bg); color: var(--body-quiet-color); }
+  .photo-grid__item label { font-size: 12px; cursor: pointer; }
+  .photo-grid__title { font-size: 11px; color: var(--body-quiet-color); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .photo-grid__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 10px; border-top: 1px solid var(--hairline-color); }
+</style>
+{% endblock %}
+{% block after_field_sets %}
+{% with form=adminform.form %}
+{% if original %}
+<fieldset class="module">
+  <h2>Фото галереи: {{ form.photos|length }}</h2>
+  {{ form.cover.errors }}{{ form.selected.errors }}
+  <div class="photo-grid">
+    <div class="photo-grid__item">
+      <span class="photo-grid__random">?</span>
+      <label><input type="radio" name="cover" value=""{% if not form.cover.value %} checked{% endif %}> случайная обложка</label>
+    </div>
+    {% for photo in form.photos %}
+    <div class="photo-grid__item">
+      <img src="{{ photo.thumb.url }}" alt="" loading="lazy">
+      <label><input type="radio" name="cover" value="{{ photo.pk }}"{% if photo.pk|stringformat:"s" == form.cover.value|stringformat:"s" %} checked{% endif %}> обложка</label>
+      <label><input type="checkbox" name="selected" value="{{ photo.pk }}"{% if photo.pk|stringformat:"s" in form.selected.value %} checked{% endif %}> выбрать</label>
+      <span class="photo-grid__title" title="{{ photo.title }}">{{ photo.title }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% if form.photos %}
+  <div class="photo-grid__actions">
+    <strong>С выбранными:</strong>
+    <span>{{ form.move_to.label_tag }} {{ form.move_to }}</span>
+    <span>или {{ form.delete_selected }} {{ form.delete_selected.label_tag }}</span>
+    <span class="help">и нажмите «Сохранить»</span>
+  </div>
+  {% endif %}
+</fieldset>
+{% endif %}
+{% endwith %}
+{% endblock %}

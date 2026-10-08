@@ -1,3 +1,40 @@
+from django.core.exceptions import ValidationError
 from django.db import models
 
-# Create your models here.
+
+class Gallery(models.Model):
+    title = models.CharField(max_length=200)
+    cover = models.ForeignKey(
+        'Photo', null=True, blank=True, on_delete=models.SET_NULL, related_name='+',
+        verbose_name='Обложка', help_text='Если не выбрана — случайное фото галереи при каждом запросе',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-id']
+        verbose_name_plural = 'galleries'
+
+    def __str__(self):
+        return self.title
+
+    def clean(self):
+        if self.cover_id and self.cover.gallery_id != self.pk:
+            raise ValidationError({'cover': 'Обложка должна быть фото из этой галереи'})
+
+
+class Photo(models.Model):
+    """Stored photo. Files are prepared by PhotoService, the model only holds data."""
+
+    gallery = models.ForeignKey(Gallery, on_delete=models.CASCADE, related_name='photos')
+    title = models.CharField(max_length=200, blank=True, help_text='Если пусто — имя файла')
+    image = models.ImageField(upload_to='original/', help_text='Оригинал, хранится и отдаётся без изменений')
+    thumb = models.ImageField(upload_to='thumb/', blank=True, editable=False)
+    width = models.PositiveIntegerField(default=0, editable=False)
+    height = models.PositiveIntegerField(default=0, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-id']
+
+    def __str__(self):
+        return self.title
