@@ -24,15 +24,11 @@ SECRET_KEY = ENV.django.secret_key.get_secret_value()
 DEBUG = ENV.django.debug
 ALLOWED_HOSTS = ENV.django.allowed_hosts
 
-# Default address for `manage.py runserver` (see config/management/commands/runserver.py)
-APP_HOST = ENV.server.host
-APP_PORT = ENV.server.port
 
 
 # Application definition
 
 INSTALLED_APPS = [
-    'config',  # must precede staticfiles so its runserver command wins
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',

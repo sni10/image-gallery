@@ -35,11 +35,10 @@ class LoadSettingsTest(SimpleTestCase):
         self.assertFalse(s.django.debug)
         self.assertEqual(s.django.allowed_hosts, ['a.com', 'b.com'])
         self.assertEqual(s.cors.allowed_origins, ['https://a.com', 'http://localhost:5173'])
-        self.assertEqual((s.db.host, s.db.port), ('localhost', 5432))
-        self.assertEqual((s.server.host, s.server.port), ('127.0.0.1', 8000))
+        self.assertEqual((s.db.host, s.db.port), ('db', 5432))
 
     def test_reports_all_errors_at_once(self):
-        self.assertInvalid('DB_PORT', 'APP_PORT', 'DB_PASSWORD', DB_PORT='99999', APP_PORT='abc', DB_PASSWORD=None)
+        self.assertInvalid('DB_PORT', 'EMAIL_PORT', 'DB_PASSWORD', DB_PORT='99999', EMAIL_PORT='abc', DB_PASSWORD=None)
 
     def test_production_requires_strong_key_and_hosts(self):
         self.assertInvalid('DJANGO_SECRET_KEY', DJANGO_SECRET_KEY='short')

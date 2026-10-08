@@ -47,17 +47,8 @@ class DatabaseSettings(Section):
     name: str
     user: str
     password: SecretStr
-    host: str = 'localhost'
+    host: str = 'db'  # the compose service
     port: Port = 5432
-
-
-class ServerSettings(Section):
-    """Default address for `manage.py runserver`."""
-
-    model_config = SettingsConfigDict(env_prefix='APP_')
-
-    host: str = '127.0.0.1'
-    port: Port = 8000
 
 
 class CorsSettings(Section):
@@ -96,7 +87,7 @@ class EmailSettings(Section):
     model_config = SettingsConfigDict(env_prefix='EMAIL_')
 
     backend: Literal['console', 'smtp'] = 'console'  # console prints emails to stdout (development)
-    host: str = 'localhost'
+    host: str = 'db'  # the compose service
     port: Port = 587
     user: str = ''
     password: SecretStr = SecretStr('')
@@ -128,7 +119,6 @@ class StaticSettings(Section):
 class AppSettings(BaseModel):
     django: DjangoSettings
     db: DatabaseSettings
-    server: ServerSettings
     cors: CorsSettings
     media: MediaSettings
     static: StaticSettings
