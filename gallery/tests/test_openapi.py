@@ -11,7 +11,7 @@ class OpenApiSchemaTest(SimpleTestCase):
         call_command('spectacular', '--validate', '--fail-on-warn', stdout=out)  # raises on warnings
         schema = yaml.safe_load(out.getvalue())
 
-        self.assertEqual(set(schema['paths']), {'/galleries', '/galleries/{id}', '/galleries/{id}/photos'})
+        self.assertEqual(set(schema['paths']), {'/photos', '/galleries', '/galleries/{id}', '/galleries/{id}/photos'})
         self.assertEqual(set(schema['paths']['/galleries/{id}/photos']['get']['responses']), {'200', '400', '404'})
         page = schema['components']['schemas']['PaginatedGalleryList']
         self.assertEqual(page['required'], ['items', 'total'])

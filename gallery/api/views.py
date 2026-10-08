@@ -1,11 +1,16 @@
+import re
+
 from django.shortcuts import get_object_or_404
-from drf_spectacular.utils import OpenApiResponse, extend_schema
+from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
+from rest_framework.exceptions import ValidationError
 from rest_framework.generics import ListAPIView, RetrieveAPIView
 
 from ..models import Gallery, Photo
-from ..services import GalleryQueries
+from ..services import GalleryQueries, PhotoQueries
 from .pagination import PageLimitPagination
 from .serializers import GallerySerializer, PhotoSerializer
+
+SEED_RE = re.compile(r'^[A-Za-z0-9]{1,32}$')
 
 BAD_PARAMS = OpenApiResponse(description='page или limit не целое число или меньше 1, например {"page": "must be >= 1"}')
 NOT_FOUND = OpenApiResponse(description='Галереи с таким id нет')
@@ -36,6 +41,28 @@ class GalleryDetailView(RetrieveAPIView):
 
     def get_object(self):
         return GalleryQueries.attach_covers([super().get_object()])[0]
+
+
+@extend_schema(
+    summary='Фото всех галерей в случайном порядке',
+    description='Для главной. Порядок задаёт seed: с одним seed все страницы идут в одном порядке, '
+                'фото не повторяются и не пропадают. Новый seed — новый порядок.',
+    parameters=[OpenApiParameter(
+        'seed', str, required=True, pattern=SEED_RE.pattern,
+        description='Ключ случайного порядка: 1–32 латинских буквы или цифры. Сгенерируйте при заходе на страницу '
+                    'и передавайте во всех запросах подгрузки.',
+    )],
+    responses={200: PhotoSerializer(many=True), 400: OpenApiResponse(description='Нет seed или неверный page/limit/seed')},
+)
+class RandomPhotoListView(ListAPIView):
+    serializer_class = PhotoSerializer
+    pagination_class = PageLimitPagination
+
+    def get_queryset(self):
+        seed = self.request.query_params.get('seed', '')
+        if not SEED_RE.fullmatch(seed):
+            raise ValidationError({'seed': 'required, 1-32 latin letters or digits'})
+        return PhotoQueries.shuffled(seed)
 
 
 @extend_schema(
