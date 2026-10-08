@@ -18,7 +18,7 @@ class OpenApiSchemaTest(SimpleTestCase):
         photo = schema['components']['schemas']['Photo']['properties']
         self.assertEqual(photo['url']['format'], 'uri')
         self.assertTrue(schema['components']['schemas']['Gallery']['properties']['cover']['nullable'])
-        self.assertNotIn('securitySchemes', schema['components'])  # public API
+        self.assertEqual(schema['components']['securitySchemes']['bearerAuth'], {'type': 'http', 'scheme': 'bearer', 'bearerFormat': 'JWT'})
 
 
 class OpenApiPagesTest(TestCase):

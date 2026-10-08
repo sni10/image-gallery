@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'drf_spectacular',
+    'accounts',
     'corsheaders',
     'gallery',
 ]
@@ -134,9 +135,20 @@ STATIC_ROOT = BASE_DIR / ENV.static.root
 
 MAILERS = {
     'default': {
-        'BACKEND': 'django.core.mail.backends.console.EmailBackend',
+        'BACKEND': f'django.core.mail.backends.{ENV.email.backend}.EmailBackend',
+        'OPTIONS': {
+            'host': ENV.email.host,
+            'port': ENV.email.port,
+            'username': ENV.email.user,
+            'password': ENV.email.password.get_secret_value(),
+            'use_tls': ENV.email.use_tls,
+            'timeout': ENV.email.timeout,
+        } if ENV.email.backend == 'smtp' else {},
     },
 }
+DEFAULT_FROM_EMAIL = ENV.email.sender
+
+FRONTEND_URL = ENV.frontend.url  # links in emails point to the SPA
 
 MEDIA_URL = ENV.media.url
 MEDIA_ROOT = BASE_DIR / ENV.media.root  # an absolute MEDIA_ROOT replaces BASE_DIR
@@ -145,7 +157,8 @@ CORS_ALLOWED_ORIGINS = ENV.cors.allowed_origins
 
 REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
-    'DEFAULT_AUTHENTICATION_CLASSES': [],  # public read-only API; the admin uses Django sessions on its own
+    # No header -> anonymous (public endpoints work as before); the admin uses Django sessions on its own
+    'DEFAULT_AUTHENTICATION_CLASSES': ['accounts.authentication.BearerAccessTokenAuthentication'],
 }
 
 # OpenAPI spec: /api/schema/ (YAML), /api/docs/ (Swagger UI), /api/redoc/; file: manage.py spectacular

@@ -49,6 +49,19 @@ class LoadSettingsTest(SimpleTestCase):
     def test_cors_origin_with_path_rejected(self):
         self.assertInvalid('CORS_ALLOWED_ORIGINS', CORS_ALLOWED_ORIGINS='https://a.com/app')
 
+    def test_email_and_frontend(self):
+        s = self.load()
+        self.assertEqual((s.email.backend, s.frontend.url), ('console', 'http://localhost:5173'))
+        s = self.load(EMAIL_BACKEND='smtp', EMAIL_HOST='smtp.example.com', EMAIL_PORT='465', EMAIL_PASSWORD='p',
+                      FRONTEND_URL='https://gallery.example.com')
+        self.assertEqual((s.email.host, s.email.port, s.frontend.url),
+                         ('smtp.example.com', 465, 'https://gallery.example.com'))
+        self.assertNotIn('p', repr(s.email.password))  # secret is not printed
+
+    def test_email_and_frontend_invalid(self):
+        self.assertInvalid('EMAIL_PORT', 'EMAIL_BACKEND', 'FRONTEND_URL',
+                           EMAIL_PORT='0', EMAIL_BACKEND='sendmail', FRONTEND_URL='https://a.com/app')
+
     def test_reads_env_file_and_env_vars_win(self):
         with tempfile.TemporaryDirectory() as tmp:
             env_file = Path(tmp) / '.env'

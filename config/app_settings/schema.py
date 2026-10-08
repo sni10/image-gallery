@@ -1,6 +1,6 @@
 """Typed configuration sections. Each section reads env vars with its own prefix and validates them."""
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
@@ -71,10 +71,38 @@ class CorsSettings(Section):
     @classmethod
     def check_origins(cls, origins):
         for origin in origins:
-            parts = urlsplit(origin)
-            if parts.scheme not in ('http', 'https') or not parts.netloc or parts.path or parts.query:
-                raise ValueError(f'"{origin}" must look like scheme://host[:port] without a path')
+            check_origin(origin)
         return origins
+
+
+def check_origin(origin: str) -> str:
+    parts = urlsplit(origin)
+    if parts.scheme not in ('http', 'https') or not parts.netloc or parts.path or parts.query:
+        raise ValueError(f'"{origin}" must look like scheme://host[:port] without a path')
+    return origin
+
+
+class FrontendSettings(Section):
+    """Where the SPA lives: links in emails point there."""
+
+    model_config = SettingsConfigDict(env_prefix='FRONTEND_')
+
+    url: str = 'http://localhost:5173'
+
+    _check_url = field_validator('url')(check_origin)
+
+
+class EmailSettings(Section):
+    model_config = SettingsConfigDict(env_prefix='EMAIL_')
+
+    backend: Literal['console', 'smtp'] = 'console'  # console prints emails to stdout (development)
+    host: str = 'localhost'
+    port: Port = 587
+    user: str = ''
+    password: SecretStr = SecretStr('')
+    use_tls: bool = True
+    timeout: int = Field(10, ge=1, description='SMTP connect/send timeout, seconds')
+    sender: str = 'Image Gallery <noreply@localhost>'
 
 
 class MediaSettings(Section):
@@ -104,3 +132,5 @@ class AppSettings(BaseModel):
     cors: CorsSettings
     media: MediaSettings
     static: StaticSettings
+    frontend: FrontendSettings
+    email: EmailSettings
