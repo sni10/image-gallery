@@ -1,0 +1,198 @@
+from dataclasses import asdict
+
+from django.core.exceptions import ValidationError as DjangoValidationError
+from drf_spectacular.utils import OpenApiResponse, extend_schema
+from rest_framework.permissions import IsAuthenticated
+from rest_framework import status
+from rest_framework.exceptions import AuthenticationFailed, PermissionDenied, ValidationError
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from ..services.auth import AuthService, EmailNotConfirmed, InvalidCredentials
+from ..services.email_tokens import InvalidEmailToken
+from ..services.profile import ProfileService
+from ..services.registration import RegistrationService
+from ..services.token_pairs import InvalidRefreshToken
+from ..throttling import IPScopedRateThrottle
+from .serializers import (
+    ChangedEmailSerializer, ChangeEmailSerializer, ChangePasswordSerializer, EmailSerializer, LoginSerializer,
+    MeSerializer, RefreshSerializer, RegisteredSerializer, RegisterSerializer, TokenPairSerializer, TokenSerializer,
+)
+
+UNAUTHORIZED = OpenApiResponse(description='Нет действующего access-токена')
+
+BAD_LINK = 'Ссылка недействительна или устарела.'
+
+
+def validated(serializer_class, request):
+    serializer = serializer_class(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    return serializer.validated_data
+
+
+def api_fields(exc: DjangoValidationError, names: dict) -> ValidationError:
+    """Rename service error keys (snake_case arguments) to the request's camelCase fields."""
+    return ValidationError({names.get(key, key): messages for key, messages in exc.message_dict.items()})
+
+
+class AuthThrottled(APIView):
+    """Base for auth endpoints: 10 requests/min per IP for the view's `throttle_scope`."""
+
+    throttle_classes = [IPScopedRateThrottle]
+
+
+class RegisterView(AuthThrottled):
+    throttle_scope = 'register'
+    registration = RegistrationService()
+
+    @extend_schema(
+        summary='Регистрация', request=RegisterSerializer,
+        responses={201: RegisteredSerializer, 400: OpenApiResponse(description='Ошибки по полям email/password')},
+    )
+    def post(self, request):
+        user = self.registration.register(**validated(RegisterSerializer, request))
+        return Response({'email': user.email}, status=status.HTTP_201_CREATED)
+
+
+class ConfirmEmailView(AuthThrottled):
+    throttle_scope = 'confirm_email'
+    registration = RegistrationService()
+
+    @extend_schema(
+        summary='Подтверждение email по ссылке из письма', request=TokenSerializer,
+        responses={200: TokenPairSerializer, 400: OpenApiResponse(description='Ссылка недействительна или устарела')},
+    )
+    def post(self, request):
+        try:
+            pair = self.registration.confirm(validated(TokenSerializer, request)['token'])
+        except InvalidEmailToken:
+            raise ValidationError({'token': [BAD_LINK]})
+        return Response(asdict(pair))
+
+
+class ResendConfirmationView(AuthThrottled):
+    throttle_scope = 'resend_confirmation'
+    registration = RegistrationService()
+
+    @extend_schema(
+        summary='Повторно отправить письмо подтверждения', request=EmailSerializer,
+        responses={204: OpenApiResponse(description='Всегда, даже если аккаунта нет — не раскрывает, кто зарегистрирован')},
+    )
+    def post(self, request):
+        self.registration.resend_confirmation(validated(EmailSerializer, request)['email'])
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class LoginView(AuthThrottled):
+    throttle_scope = 'login'
+    auth = AuthService()
+
+    @extend_schema(
+        summary='Вход', request=LoginSerializer,
+        responses={
+            200: TokenPairSerializer,
+            401: OpenApiResponse(description='Неверный email или пароль (одинаково для обоих случаев)'),
+            403: OpenApiResponse(description='{"detail": "...", "code": "email_not_confirmed"}'),
+        },
+    )
+    def post(self, request):
+        data = validated(LoginSerializer, request)
+        try:
+            pair = self.auth.login(data['email'], data['password'])
+        except InvalidCredentials:
+            raise AuthenticationFailed('Неверный email или пароль.')
+        except EmailNotConfirmed:
+            raise PermissionDenied({'detail': 'Email не подтверждён.', 'code': 'email_not_confirmed'})
+        return Response(asdict(pair))
+
+
+class RefreshView(APIView):
+    auth = AuthService()
+
+    @extend_schema(
+        summary='Обновить пару токенов', request=RefreshSerializer,
+        responses={200: TokenPairSerializer, 401: OpenApiResponse(description='Refresh просрочен, отозван или подделан')},
+    )
+    def post(self, request):
+        try:
+            pair = self.auth.refresh(validated(RefreshSerializer, request)['refresh'])
+        except InvalidRefreshToken:
+            raise AuthenticationFailed('Refresh-токен недействителен.')
+        return Response(asdict(pair))
+
+
+class LogoutView(APIView):
+    auth = AuthService()
+
+    @extend_schema(summary='Выход: отзыв refresh-токена', request=RefreshSerializer,
+                   responses={204: OpenApiResponse(description='Токен отозван')})
+    def post(self, request):
+        self.auth.logout(validated(RefreshSerializer, request)['refresh'])
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class MeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(summary='Текущий пользователь', responses={200: MeSerializer, 401: UNAUTHORIZED})
+    def get(self, request):
+        return Response(MeSerializer(request.user).data)
+
+
+class ChangeEmailView(APIView):
+    permission_classes = [IsAuthenticated]
+    profile = ProfileService()
+
+    @extend_schema(
+        summary='Запросить смену email', request=ChangeEmailSerializer,
+        responses={
+            202: OpenApiResponse(description='Письмо со ссылкой отправлено на новый адрес; email пока прежний'),
+            400: OpenApiResponse(description='Ошибки по полям newEmail/password'),
+            401: UNAUTHORIZED,
+        },
+    )
+    def post(self, request):
+        data = validated(ChangeEmailSerializer, request)
+        try:
+            self.profile.request_email_change(request.user, data['newEmail'], data['password'])
+        except DjangoValidationError as exc:
+            raise api_fields(exc, {'new_email': 'newEmail'})
+        return Response(status=status.HTTP_202_ACCEPTED)
+
+
+class ConfirmEmailChangeView(APIView):
+    profile = ProfileService()
+
+    @extend_schema(
+        summary='Подтвердить смену email по ссылке из письма', request=TokenSerializer,
+        responses={200: ChangedEmailSerializer,
+                   400: OpenApiResponse(description='Ссылка недействительна, устарела или адрес уже занят')},
+    )
+    def post(self, request):
+        try:
+            email = self.profile.confirm_email_change(validated(TokenSerializer, request)['token'])
+        except InvalidEmailToken:
+            raise ValidationError({'token': [BAD_LINK]})
+        return Response({'email': email})
+
+
+class ChangePasswordView(AuthThrottled):
+    throttle_scope = 'change_password'
+    permission_classes = [IsAuthenticated]
+    profile = ProfileService()
+
+    @extend_schema(
+        summary='Сменить пароль', request=ChangePasswordSerializer,
+        responses={
+            200: OpenApiResponse(TokenPairSerializer, description='Новая пара; все прежние refresh-токены отозваны'),
+            400: OpenApiResponse(description='Ошибки по полям currentPassword/newPassword'),
+            401: UNAUTHORIZED,
+        },
+    )
+    def post(self, request):
+        data = validated(ChangePasswordSerializer, request)
+        try:
+            pair = self.profile.change_password(request.user, data['currentPassword'], data['newPassword'])
+        except DjangoValidationError as exc:
+            raise api_fields(exc, {'current_password': 'currentPassword', 'new_password': 'newPassword'})
+        return Response(asdict(pair))

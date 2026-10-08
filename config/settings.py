@@ -159,6 +159,14 @@ REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     # No header -> anonymous (public endpoints work as before); the admin uses Django sessions on its own
     'DEFAULT_AUTHENTICATION_CLASSES': ['accounts.authentication.BearerAccessTokenAuthentication'],
+    'EXCEPTION_HANDLER': 'config.drf.exception_handler',
+    # Brute-force protection for auth endpoints (accounts.throttling.IPScopedRateThrottle, per IP and endpoint).
+    # ponytail: LocMemCache is per gunicorn worker, so the real limit is rate x workers; use a shared cache if it matters
+    'DEFAULT_THROTTLE_RATES': {
+        scope: '10/min' for scope in ('register', 'login', 'resend_confirmation', 'confirm_email', 'change_password')
+    },
+    # The app runs behind exactly one proxy (nginx): the client IP is the last X-Forwarded-For entry it appends
+    'NUM_PROXIES': 1,
 }
 
 # OpenAPI spec: /api/schema/ (YAML), /api/docs/ (Swagger UI), /api/redoc/; file: manage.py spectacular

@@ -2,6 +2,7 @@ from django.db.models import Count, OuterRef, QuerySet, Subquery
 from django.db.models.functions import Coalesce
 
 from ..models import Gallery, Photo
+from .photo_queries import PhotoQueries
 
 
 class GalleryQueries:
@@ -25,9 +26,11 @@ class GalleryQueries:
         )
 
     @staticmethod
-    def attach_covers(galleries: list[Gallery]) -> list[Gallery]:
-        """Set `gallery.display_cover` (Photo or None) for galleries from with_stats(), in one query."""
-        covers = Photo.objects.in_bulk([g.display_cover_id for g in galleries if g.display_cover_id])
+    def attach_covers(galleries: list[Gallery], user) -> list[Gallery]:
+        """Set `gallery.display_cover` (Photo or None, with `is_favorite` for `user`) for galleries
+        from with_stats(), in one query."""
+        photos = PhotoQueries.with_is_favorite(Photo.objects.all(), user)
+        covers = photos.in_bulk([g.display_cover_id for g in galleries if g.display_cover_id])
         for gallery in galleries:
             gallery.display_cover = covers.get(gallery.display_cover_id)
         return galleries
