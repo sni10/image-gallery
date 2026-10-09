@@ -1,8 +1,15 @@
 # Production entry point: HTTPS (Let's Encrypt, automatic), static files, reverse proxy to gunicorn.
-# Caddy is the only proxy in front of the app (settings.NUM_PROXIES = 1). It ignores client-sent
-# X-Forwarded-* headers and sets its own, so the app can trust X-Forwarded-Proto and the last XFF entry.
+# The app trusts X-Forwarded-Proto and the last X-Forwarded-For entry (settings.NUM_PROXIES = 1): Caddy sends
+# exactly one XFF value, the client IP. Behind the Cloudflare proxy that IP comes from CF-Connecting-IP, which is
+# believed only when the connection itself comes from Cloudflare's networks (anyone else can't spoof it).
 {
 	email {$ACME_EMAIL}
+	servers {
+		# ponytail: static copy of https://www.cloudflare.com/ips-v4 and /ips-v6 (09.10.2026); they change rarely,
+		# re-check when the proxy is touched. Upgrade path: a Caddy build with the caddy-cloudflare-ip module.
+		trusted_proxies static 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32
+		client_ip_headers CF-Connecting-IP
+	}
 }
 
 # HSTS: browsers that saw us use HTTPS only. Raised in steps (see DEPLOY.md): 300 s -> 1 week -> 1 year.
@@ -34,7 +41,9 @@
 (app) {
 	handle {
 		encode zstd gzip
-		reverse_proxy app:8000
+		reverse_proxy app:8000 {
+			header_up X-Forwarded-For {client_ip}
+		}
 	}
 }
 

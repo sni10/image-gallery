@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
 import os
+import tempfile
 from pathlib import Path
 
 from .app_settings import load_settings
@@ -164,17 +165,27 @@ MEDIA_ROOT = BASE_DIR / ENV.media.root  # an absolute MEDIA_ROOT replaces BASE_D
 
 CORS_ALLOWED_ORIGINS = ENV.cors.allowed_origins
 
+# Shared by all gunicorn workers of a container (the default LocMemCache is per process, which multiplied
+# the auth throttle limits by the worker count). Only throttle counters are stored; losing them on restart is fine.
+# ponytail: files in the container's tmp; move to Redis/Memcached if several app containers ever run.
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
+        'LOCATION': Path(tempfile.gettempdir()) / 'image-gallery-cache',
+    }
+}
+
 REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     # No header -> anonymous (public endpoints work as before); the admin uses Django sessions on its own
     'DEFAULT_AUTHENTICATION_CLASSES': ['accounts.authentication.BearerAccessTokenAuthentication'],
     'EXCEPTION_HANDLER': 'config.drf.exception_handler',
     # Brute-force protection for auth endpoints (accounts.throttling.IPScopedRateThrottle, per IP and endpoint).
-    # ponytail: LocMemCache is per gunicorn worker, so the real limit is rate x workers; use a shared cache if it matters
+    # Counters live in CACHES below, shared by all gunicorn workers.
     'DEFAULT_THROTTLE_RATES': {
         scope: '10/min' for scope in ('register', 'login', 'resend_confirmation', 'confirm_email', 'change_password')
     },
-    # The app runs behind exactly one proxy (nginx): the client IP is the last X-Forwarded-For entry it appends
+    # The app runs behind exactly one proxy (Caddy): it sends one X-Forwarded-For value, the client IP
     'NUM_PROXIES': 1,
 }
 
