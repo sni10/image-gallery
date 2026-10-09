@@ -89,3 +89,16 @@ class PhotoServiceTest(TestCase):
         self.assertTrue(photo.thumb.name.endswith('.webp'))
         self.assertEqual(Image.open(photo.thumb).format, 'WEBP')
         self.assertEqual((photo.width, photo.height), (600, 800))
+
+    def test_delete_removes_files_unless_shared(self):
+        a = PhotoService().create(jpeg(800, 600, 'one.jpg'), self.gallery)
+        b = PhotoService().create(jpeg(800, 600, 'copy.jpg'), self.gallery)  # shares a's files
+        storage, names = a.image.storage, (a.image.name, a.thumb.name)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            PhotoService.delete(self.gallery.photos.filter(pk=a.pk))
+        self.assertTrue(all(storage.exists(n) for n in names))
+
+        with self.captureOnCommitCallbacks(execute=True):
+            self.gallery.delete()  # cascade
+        self.assertFalse(any(storage.exists(n) for n in names))
