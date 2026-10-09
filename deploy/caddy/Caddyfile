@@ -57,12 +57,25 @@ api.artai.win {
 	import app
 }
 
-# Admin (bulk uploads go here). Restrict to own IPs later if needed: `@outside not remote_ip ...` + respond 403.
+# Admin (bulk uploads go here). Closed to robots: robots.txt disallows everything, every response carries
+# X-Robots-Tag noindex, and crawlers / scripted clients get 403 before reaching the app (only browsers need the admin).
+# Restrict to own IPs later if needed: `@outside not remote_ip ...` + respond 403.
 secure.artai.win {
+	header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex"
 	request_body {
 		max_size 500MB
 	}
-	import media
-	import static
-	import app
+	@robots header_regexp User-Agent (?i)(bot|crawl|spider|slurp|archiver|scrap|fetch|preview|curl|wget|python|httpclient|okhttp|go-http|java/|libwww|headless|^$)
+	@no_agent not header User-Agent *
+	route {
+		# route keeps this exact order: the bans run before any file or app handler
+		respond /robots.txt "User-agent: *
+Disallow: /
+" 200
+		respond @robots 403
+		respond @no_agent 403
+		import media
+		import static
+		import app
+	}
 }
