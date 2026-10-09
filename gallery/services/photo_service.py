@@ -23,7 +23,6 @@ class PhotoService:
 
     def apply_image(self, photo: Photo, file) -> None:
         """Store `file` untouched as the original (named by its SHA-256) plus a WebP thumb. Does not save the photo."""
-        # ponytail: replaced/deleted photos leave old files in media/; add django-cleanup if disk matters
         processed = self._processor.process(file)
         path = sharded_path(file_sha256(file))
         photo.title = photo.title or Path(file.name).stem
@@ -60,8 +59,8 @@ class PhotoService:
 
     @staticmethod
     def delete(photos: QuerySet[Photo]) -> int:
-        """Delete photos; a gallery whose cover is deleted falls back to random (FK is SET_NULL)."""
-        # ponytail: files stay in media/ (see apply_image)
+        """Delete photos; a gallery whose cover is deleted falls back to random (FK is SET_NULL).
+        Unused files are removed by the post_delete signal (gallery/signals.py)."""
         deleted, _ = photos.delete()
         return deleted
 
