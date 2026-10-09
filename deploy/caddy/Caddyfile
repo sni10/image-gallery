@@ -32,12 +32,12 @@
 	}
 }
 
-# Frontend (SPA). Until the frontend is deployed /srv/frontend is empty -> 404.
+# Frontend: SSR Node server (front service, image from ../image-gallery-front). Vite's /assets/* have hashed names.
 artai.win {
-	root * /srv/frontend
 	encode zstd gzip
-	try_files {path} /index.html
-	file_server
+	@assets path /assets/*
+	header @assets >Cache-Control "public, max-age=31536000, immutable"
+	reverse_proxy front:5173
 }
 
 www.artai.win {

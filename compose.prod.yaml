@@ -1,5 +1,5 @@
 # Production stack (server: /srv/artai). Values come from .env next to this file (see .env.production.example).
-# Run with IMAGE_TAG=<commit sha>: deploy/deploy.sh does it. Only caddy publishes ports: Docker opens
+# IMAGE_TAG / FRONT_TAG = backend / frontend commit SHA, written to .env by each repo's deploy/deploy.sh. Only caddy publishes ports: Docker opens
 # published ports past ufw, so db and app must never get a `ports:` section.
 services:
   db:
@@ -28,6 +28,13 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  front:
+    image: ghcr.io/sni10/image-gallery-front:${FRONT_TAG:?set FRONT_TAG to a frontend commit SHA}
+    environment:
+      # Server render calls the public API through Caddy (alias below), so image links come back as https://api.artai.win/...
+      API_INTERNAL_URL: https://api.artai.win
+    restart: unless-stopped
+
   caddy:
     image: caddy:2.11
     ports:
@@ -38,13 +45,16 @@ services:
       ACME_EMAIL: ${ACME_EMAIL}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./frontend:/srv/frontend:ro
       - media:/srv/media:ro
       - static:/srv/static:ro
       - caddy_data:/data
       - caddy_config:/config
+    networks:
+      default:
+        aliases: [api.artai.win]  # the front container reaches the API via Caddy without leaving the server
     depends_on:
       - app
+      - front
     restart: unless-stopped
 
 volumes:
