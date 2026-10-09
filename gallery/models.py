@@ -2,8 +2,10 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 
+from common.models import PublicIdModel
 
-class Category(models.Model):
+
+class Category(PublicIdModel):
     """Section of the catalog (AI, comics, ...). Every gallery belongs to exactly one category."""
 
     title = models.CharField(max_length=100)
@@ -22,7 +24,7 @@ class Category(models.Model):
         self.slug = self.slug.lower()  # SlugField accepts upper case; addresses are lower case
 
 
-class Gallery(models.Model):
+class Gallery(PublicIdModel):
     title = models.CharField(max_length=200)
     category = models.ForeignKey(
         Category, on_delete=models.PROTECT, related_name='galleries', verbose_name='Категория',
@@ -45,7 +47,7 @@ class Gallery(models.Model):
             raise ValidationError({'cover': 'Обложка должна быть фото из этой галереи'})
 
 
-class Photo(models.Model):
+class Photo(PublicIdModel):
     """Stored photo. Files are prepared by PhotoService, the model only holds data."""
 
     gallery = models.ForeignKey(Gallery, on_delete=models.CASCADE, related_name='photos')

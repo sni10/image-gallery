@@ -51,6 +51,14 @@ class PhotoService:
         return Photo.objects.filter(pk__in=ids).update(gallery=gallery)
 
     @staticmethod
+    def reissue_links(photos: QuerySet[Photo]) -> int:
+        """New public ids for these photos; old ids return 404. Favorites and covers point to the pk, so they stay."""
+        photos = list(photos)
+        for photo in photos:
+            photo.reissue_link()
+        return len(photos)
+
+    @staticmethod
     def delete(photos: QuerySet[Photo]) -> int:
         """Delete photos; a gallery whose cover is deleted falls back to random (FK is SET_NULL)."""
         # ponytail: files stay in media/ (see apply_image)

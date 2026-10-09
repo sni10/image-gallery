@@ -13,10 +13,13 @@ class BearerAccessTokenAuthentication(BaseAuthentication):
         if scheme.lower() != 'bearer':
             return None
         try:
-            user_id = AccessTokenService().verify(token.strip())
+            public_id = AccessTokenService().verify(token.strip())
         except InvalidAccessToken:
             raise AuthenticationFailed('Invalid or expired access token', code='token_invalid')
-        user = get_user_model().objects.filter(pk=user_id, is_active=True).first()
+        # a reissued link (new public id) makes older access tokens unresolvable -> 401
+        user = get_user_model().objects.select_related('profile').filter(
+            profile__public_id=public_id, is_active=True,
+        ).first()
         if user is None:
             raise AuthenticationFailed('User not found or inactive', code='user_inactive')
         return user, token

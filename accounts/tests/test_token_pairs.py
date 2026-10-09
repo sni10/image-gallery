@@ -17,7 +17,7 @@ class TokenPairServiceTest(TestCase):
 
     def test_issue(self):
         pair = self.service.issue(self.user)
-        self.assertEqual(AccessTokenService().verify(pair.access), self.user.pk)
+        self.assertEqual(AccessTokenService().verify(pair.access), self.user.profile.public_id)
         stored = RefreshToken.objects.get()
         self.assertNotEqual(stored.token_hash, pair.refresh)  # only the hash is stored
         self.assertFalse(RefreshToken.objects.filter(token_hash=pair.refresh).exists())
@@ -26,7 +26,7 @@ class TokenPairServiceTest(TestCase):
         first = self.service.issue(self.user)
         second = self.service.rotate(first.refresh)
         self.assertNotEqual(first.refresh, second.refresh)
-        self.assertEqual(AccessTokenService().verify(second.access), self.user.pk)
+        self.assertEqual(AccessTokenService().verify(second.access), self.user.profile.public_id)
         families = set(RefreshToken.objects.values_list('family', flat=True))
         self.assertEqual(len(families), 1)  # rotation stays in the login's family
 

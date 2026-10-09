@@ -14,7 +14,7 @@ class RandomPhotoApiTest(TestCase):
         cls.ids = set()
         for g in (gallery('A'), gallery('B'), gallery('C')):
             for i in range(5):
-                cls.ids.add(str(service.create(jpeg(100 + i, 50 + len(cls.ids)), g).pk))  # unique content
+                cls.ids.add(service.create(jpeg(100 + i, 50 + len(cls.ids)), g).public_id)  # unique content
 
     def ids_of(self, seed, page, limit=4):
         data = self.client.get(f'/photos?seed={seed}&page={page}&limit={limit}').json()

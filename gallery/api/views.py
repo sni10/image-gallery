@@ -17,7 +17,9 @@ from .serializers import CategoryWithCountSerializer, GallerySerializer, PhotoSe
 SEED_RE = re.compile(r'^[A-Za-z0-9]{1,32}$')
 
 BAD_PARAMS = OpenApiResponse(description='page или limit не целое число или меньше 1, например {"page": "must be >= 1"}')
-NOT_FOUND = OpenApiResponse(description='Галереи с таким id нет')
+NOT_FOUND = OpenApiResponse(description='Галереи с таким id нет (в том числе старый id после перевыпуска ссылки)')
+GALLERY_ID = OpenApiParameter('id', str, OpenApiParameter.PATH, description='Публичный id галереи (поле id), не число')
+PHOTO_ID = OpenApiParameter('photo_id', str, OpenApiParameter.PATH, description='Публичный id фото (поле id), не число')
 
 
 @extend_schema(
@@ -55,9 +57,11 @@ class GalleryListView(ListAPIView):
         return GalleryQueries.attach_covers(super().paginate_queryset(queryset), self.request.user)
 
 
-@extend_schema(summary='Галерея', responses={200: GallerySerializer, 404: NOT_FOUND})
+@extend_schema(summary='Галерея', parameters=[GALLERY_ID], responses={200: GallerySerializer, 404: NOT_FOUND})
 class GalleryDetailView(RetrieveAPIView):
     serializer_class = GallerySerializer
+    lookup_field = 'public_id'
+    lookup_url_kwarg = 'id'
 
     def get_queryset(self):
         return GalleryQueries.with_stats()
@@ -91,6 +95,7 @@ class RandomPhotoListView(ListAPIView):
 @extend_schema(
     summary='Фото галереи',
     description='Сначала новые. 404 проверяется раньше параметров пагинации.',
+    parameters=[GALLERY_ID],
     responses={200: PhotoSerializer(many=True), 400: BAD_PARAMS, 404: NOT_FOUND},
 )
 class GalleryPhotoListView(ListAPIView):
@@ -100,7 +105,7 @@ class GalleryPhotoListView(ListAPIView):
     def get_queryset(self):
         if getattr(self, 'swagger_fake_view', False):  # schema generation: no real request
             return Photo.objects.none()
-        photos = get_object_or_404(Gallery, pk=self.kwargs['pk']).photos.all()
+        photos = get_object_or_404(Gallery, public_id=self.kwargs['id']).photos.all()
         return PhotoQueries.with_is_favorite(photos, self.request.user)
 
 
@@ -127,7 +132,7 @@ class FavoriteView(APIView):
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
-        summary='Добавить фото в избранное', request=None,
+        summary='Добавить фото в избранное', request=None, parameters=[PHOTO_ID],
         responses={204: OpenApiResponse(description='Добавлено (или уже было)'), 401: UNAUTHORIZED,
                    404: OpenApiResponse(description='Фото с таким id нет')},
     )
@@ -139,7 +144,7 @@ class FavoriteView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @extend_schema(
-        summary='Убрать фото из избранного',
+        summary='Убрать фото из избранного', parameters=[PHOTO_ID],
         responses={204: OpenApiResponse(description='Убрано (или его и не было)'), 401: UNAUTHORIZED},
     )
     def delete(self, request, photo_id):

@@ -62,14 +62,14 @@ class CategoryApiTest(TestCase):
         r = self.client.get('/categories')  # no auth needed
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.json(), [
-            {'id': str(self.comics.pk), 'slug': 'comics', 'title': 'Комиксы', 'galleriesCount': 1},
-            {'id': str(self.ai.pk), 'slug': 'ai', 'title': 'AI', 'galleriesCount': 3},
+            {'id': self.comics.public_id, 'slug': 'comics', 'title': 'Комиксы', 'galleriesCount': 1},
+            {'id': self.ai.public_id, 'slug': 'ai', 'title': 'AI', 'galleriesCount': 3},
         ])  # empty "Фото" hidden, ordered by position
 
     # 2.2
     def test_category_in_gallery(self):
-        expected = {'id': str(self.comics.pk), 'slug': 'comics', 'title': 'Комиксы'}
-        self.assertEqual(self.client.get(f'/galleries/{self.comic.pk}').json()['category'], expected)
+        expected = {'id': self.comics.public_id, 'slug': 'comics', 'title': 'Комиксы'}
+        self.assertEqual(self.client.get(f'/galleries/{self.comic.public_id}').json()['category'], expected)
         items = self.client.get('/galleries').json()['items']
         self.assertTrue(all(set(g['category']) == {'id', 'slug', 'title'} for g in items))
 
@@ -87,7 +87,7 @@ class CategoryApiTest(TestCase):
     # 2.3
     def test_filter_by_category(self):
         r = self.client.get('/galleries?category=ai')
-        self.assertEqual((sorted(self.ids(r)), r.json()['total']), (sorted(str(g.pk) for g in self.ai_galleries), 3))
+        self.assertEqual((sorted(self.ids(r)), r.json()['total']), (sorted(g.public_id for g in self.ai_galleries), 3))
         self.assertEqual(self.client.get('/galleries').json()['total'], 4)
         self.assertEqual(self.client.get('/galleries?category=nope').json(), {'items': [], 'total': 0})
         self.assertEqual(self.client.get('/galleries?category=photo').json(), {'items': [], 'total': 0})

@@ -1,6 +1,8 @@
 from django.conf import settings
 from django.db import models
 
+from common.models import PublicIdModel
+
 
 class RefreshToken(models.Model):
     """Opaque refresh token. Only its SHA-256 is stored; the raw value lives on the client."""
@@ -15,3 +17,15 @@ class RefreshToken(models.Model):
 
     def __str__(self):
         return f'{self.user} / {self.family}'
+
+
+class Profile(PublicIdModel):
+    """The user's public id (auth.User can't get fields of its own). Created automatically with the user."""
+
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='profile')
+
+    def __str__(self):
+        return str(self.user)
+
+    def default_link_date(self):
+        return self.user.date_joined

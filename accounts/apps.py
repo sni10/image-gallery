@@ -5,4 +5,4 @@ class AccountsConfig(AppConfig):
     name = 'accounts'
 
     def ready(self):
-        from . import schema  # noqa: F401  registers the OpenAPI auth extension
+        from . import schema, signals  # noqa: F401  register the OpenAPI auth extension and signals

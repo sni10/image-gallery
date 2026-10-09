@@ -23,7 +23,7 @@ class EmailTokenService:
         self.max_age = max_age
 
     def make(self, user, purpose: str, **data) -> str:
-        payload = {'uid': user.pk, 'purpose': purpose, 'state': self._state(user), **data}
+        payload = {'uid': user.profile.public_id, 'purpose': purpose, 'state': self._state(user), **data}
         return signing.dumps(payload, salt=self.salt, compress=True)
 
     def read(self, token: str, purpose: str):
@@ -34,7 +34,8 @@ class EmailTokenService:
             raise InvalidEmailToken(str(exc)) from exc
         if payload.get('purpose') != purpose:
             raise InvalidEmailToken('wrong purpose')
-        user = get_user_model().objects.filter(pk=payload.get('uid')).first()
+        uid = payload.get('uid')
+        user = get_user_model().objects.filter(profile__public_id=uid).first() if isinstance(uid, str) else None
         if user is None or not constant_time_compare(payload.get('state', ''), self._state(user)):
             raise InvalidEmailToken('already used or account changed')
         return user, payload

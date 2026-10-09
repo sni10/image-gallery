@@ -1,3 +1,4 @@
+import re
 from datetime import timedelta
 
 import jwt
@@ -5,6 +6,7 @@ from django.conf import settings
 from django.utils import timezone
 
 ALGORITHM = 'HS256'
+PUBLIC_ID = re.compile(r'[a-z2-7]{26}')
 
 
 class InvalidAccessToken(Exception):
@@ -19,11 +21,11 @@ class AccessTokenService:
 
     def issue(self, user) -> str:
         now = timezone.now()
-        claims = {'sub': str(user.pk), 'type': 'access', 'iat': now, 'exp': now + self.lifetime}
+        claims = {'sub': user.profile.public_id, 'type': 'access', 'iat': now, 'exp': now + self.lifetime}
         return jwt.encode(claims, settings.SECRET_KEY, algorithm=ALGORITHM)
 
-    def verify(self, token: str) -> int:
-        """Return the user id from a valid access token, raise InvalidAccessToken otherwise."""
+    def verify(self, token: str) -> str:
+        """Return the user's public id from a valid access token, raise InvalidAccessToken otherwise."""
         try:
             claims = jwt.decode(
                 token, settings.SECRET_KEY,
@@ -32,6 +34,6 @@ class AccessTokenService:
             )
         except jwt.InvalidTokenError as exc:
             raise InvalidAccessToken(str(exc)) from exc
-        if claims['type'] != 'access' or not claims['sub'].isdigit():
+        if claims['type'] != 'access' or not PUBLIC_ID.fullmatch(claims['sub']):
             raise InvalidAccessToken('not an access token')
-        return int(claims['sub'])
+        return claims['sub']

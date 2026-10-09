@@ -26,7 +26,7 @@ class ProfileApiTest(ApiTestCase):
     def test_me(self):
         r = self.client.get('/me', **self.auth())
         self.assertEqual(r.status_code, 200)
-        self.assertEqual((r.json()['id'], r.json()['email']), (str(self.user.pk), 'anna@example.com'))
+        self.assertEqual((r.json()['id'], r.json()['email']), (self.user.profile.public_id, 'anna@example.com'))
         self.assertIn('dateJoined', r.json())
         self.assertEqual(self.client.get('/me').status_code, 401)
 

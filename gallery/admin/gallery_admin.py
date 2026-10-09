@@ -3,15 +3,19 @@ from pathlib import Path
 from django.contrib import admin
 from django.utils.html import format_html
 
+from common.admin_mixins import ReissueLinkAdminMixin
+
 from ..models import Gallery
 from ..services import GalleryQueries, PhotoService
 from .forms import GalleryAdminForm
 
 
 @admin.register(Gallery)
-class GalleryAdmin(admin.ModelAdmin):
+class GalleryAdmin(ReissueLinkAdminMixin, admin.ModelAdmin):
     form = GalleryAdminForm
-    fields = ['title', 'category', 'new_images']  # the photo grid is rendered by the change_form template
+    fields = ['title', 'category', 'link_date', 'public_id', 'new_images']  # photo grid: change_form template
+    readonly_fields = ['public_id']
+    actions = ['reissue_links']
     list_display = ['id', 'cover_preview', 'title', 'category', 'photos_count', 'created_at']
     list_display_links = ['id', 'cover_preview', 'title']
     list_filter = ['category']
@@ -44,6 +48,9 @@ class GalleryAdmin(admin.ModelAdmin):
         elif data['delete_selected']:
             deleted = self.photo_service.delete(selected)
             self.message_user(request, f'Удалено фото: {deleted}')
+        elif data['reissue_selected']:
+            reissued = self.photo_service.reissue_links(selected)
+            self.message_user(request, f'Перевыпущены ссылки фото: {reissued}')
 
     @admin.display(description='Обложка')
     def cover_preview(self, obj):

@@ -31,6 +31,13 @@ class OpenApiSchemaTest(SimpleTestCase):
         self.assertEqual(photo['url']['format'], 'uri')
         self.assertEqual(photo['isFavorite']['type'], 'boolean')
         self.assertTrue(schema['components']['schemas']['Gallery']['properties']['cover']['nullable'])
+        for path, method in (('/galleries/{id}', 'get'), ('/galleries/{id}/photos', 'get'),
+                             ('/me/favorites/{photo_id}', 'put'), ('/me/favorites/{photo_id}', 'delete')):
+            param = next(p for p in schema['paths'][path][method]['parameters'] if p['in'] == 'path')
+            self.assertEqual(param['schema']['type'], 'string')
+            self.assertIn('Публичный id', param['description'])
+        for name in ('Gallery', 'Photo', 'Category'):
+            self.assertIn('Публичный id', schema['components']['schemas'][name]['properties']['id']['description'])
         self.assertIn('category', schema['components']['schemas']['Gallery']['required'])
         catalog_params = {p['name'] for p in schema['paths']['/galleries']['get']['parameters']}
         self.assertEqual(catalog_params, {'page', 'limit', 'category'})

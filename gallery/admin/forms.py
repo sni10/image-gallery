@@ -1,5 +1,7 @@
 from django import forms
 
+from common.forms import LinkDateFormMixin
+
 from ..models import Gallery, Photo
 from ..services import SUPPORTED_FORMATS
 
@@ -24,7 +26,7 @@ class MultipleImageField(forms.ImageField):
         return files
 
 
-class GalleryAdminForm(forms.ModelForm):
+class GalleryAdminForm(LinkDateFormMixin, forms.ModelForm):
     """Gallery edit form. Besides the title it uploads new photos and handles the photo grid:
     `cover` (radio per photo) and `selected` (checkbox per photo) + what to do with the selection.
     The grid is rendered by admin/gallery/gallery/change_form.html."""
@@ -36,10 +38,11 @@ class GalleryAdminForm(forms.ModelForm):
     selected = forms.ModelMultipleChoiceField(Photo.objects.none(), required=False)
     move_to = forms.ModelChoiceField(Gallery.objects.none(), required=False, label='Перенести в галерею')
     delete_selected = forms.BooleanField(required=False, label='Удалить')
+    reissue_selected = forms.BooleanField(required=False, label='Перевыпустить ссылки')
 
     class Meta:
         model = Gallery
-        fields = ['title', 'category']
+        fields = ['title', 'category', 'link_date']
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -52,9 +55,9 @@ class GalleryAdminForm(forms.ModelForm):
 
     def clean(self):
         data = super().clean()
-        move_to, delete = data.get('move_to'), data.get('delete_selected')
-        if move_to and delete:
-            raise forms.ValidationError('Выберите что-то одно: перенести или удалить')
-        if (move_to or delete) and not data.get('selected'):
+        chosen = [bool(data.get(name)) for name in ('move_to', 'delete_selected', 'reissue_selected')]
+        if sum(chosen) > 1:
+            raise forms.ValidationError('Выберите что-то одно: перенести, удалить или перевыпустить ссылки')
+        if any(chosen) and not data.get('selected'):
             raise forms.ValidationError('Отметьте фото галочкой «выбрать»')
         return data

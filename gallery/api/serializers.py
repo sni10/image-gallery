@@ -6,7 +6,7 @@ from ..models import Category, Gallery, Photo
 
 
 class PhotoSerializer(serializers.ModelSerializer):
-    id = serializers.CharField(read_only=True, help_text='Числовой id в виде строки')
+    id = serializers.CharField(source='public_id', read_only=True, help_text='Публичный id: 26 символов [a-z2-7], не число')
     url = serializers.SerializerMethodField(
         help_text='Оригинал без изменений (jpg/png/webp/gif/avif), абсолютная ссылка. Для лайтбокса и зума 1:1',
     )
@@ -39,7 +39,7 @@ class PhotoSerializer(serializers.ModelSerializer):
 
 
 class CategorySerializer(serializers.ModelSerializer):
-    id = serializers.CharField(read_only=True, help_text='Числовой id в виде строки')
+    id = serializers.CharField(source='public_id', read_only=True, help_text='Публичный id: 26 символов [a-z2-7], не число')
 
     class Meta:
         model = Category
@@ -58,7 +58,7 @@ class CategoryWithCountSerializer(CategorySerializer):
 class GallerySerializer(serializers.ModelSerializer):
     """Expects galleries from GalleryQueries.with_stats() with covers attached."""
 
-    id = serializers.CharField(read_only=True, help_text='Числовой id в виде строки')
+    id = serializers.CharField(source='public_id', read_only=True, help_text='Публичный id: 26 символов [a-z2-7], не число')
     photosCount = serializers.IntegerField(source='photos_count', read_only=True, help_text='Сколько фото в галерее')
     category = CategorySerializer(read_only=True, help_text='Категория галереи, всегда заполнена')
     cover = PhotoSerializer(

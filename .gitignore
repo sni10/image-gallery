@@ -6,3 +6,4 @@ media/
 .env
 .idea/
 staticfiles/
+/DEPLOY.md

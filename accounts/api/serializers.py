@@ -29,7 +29,7 @@ class RefreshSerializer(serializers.Serializer):
 
 
 class MeSerializer(serializers.Serializer):
-    id = serializers.CharField(source='pk', help_text='Числовой id в виде строки')
+    id = serializers.CharField(source='profile.public_id', help_text='Публичный id: 26 символов [a-z2-7], не число')
     email = serializers.EmailField()
     dateJoined = serializers.DateTimeField(source='date_joined')
 
