@@ -4,8 +4,8 @@
 
 ## 2. Сборка образа
 
-- [ ] 2.1 `.github/workflows/ci.yml` (тесты на PostgreSQL → сборка → push в GHCR с тегом SHA, кеш gha); проверить: workflow валиден (`actionlint` или пробный запуск после пуша владельцем), образ появляется в GHCR
-- [ ] 2.2 Семантическое версионирование и формат коммитов: python-semantic-release (тег + GitHub Release, `commit: false`), commitlint на push и PR в `main`, тег образа `vX.Y.Z`, инструкция в `CLAUDE.md`; проверить: `actionlint`, commitlint принимает историю и отвергает `added stuff`, пробный расчёт версии даёт `0.1.0`, после пуша владельцем — тег `v0.1.0`, Release и образ `:v0.1.0`
+- [x] 2.1 `.github/workflows/ci.yml` (тесты на PostgreSQL → сборка → push в GHCR с тегом SHA, кеш gha); проверить: workflow валиден (`actionlint` или пробный запуск после пуша владельцем), образ появляется в GHCR
+- [x] 2.2 Семантическое версионирование и формат коммитов: python-semantic-release (тег + GitHub Release, `commit: false`), commitlint на push и PR в `main`, тег образа `vX.Y.Z`, инструкция в `CLAUDE.md`; проверить: `actionlint`, commitlint принимает историю и отвергает `added stuff`, пробный расчёт версии даёт `0.1.0`, после пуша владельцем — тег `v0.1.0`, Release и образ `:v0.1.0`
 
 - [x] 2.3 Отчёты тестов в CI: coverage (HTML + XML, сводка покрытия на странице запуска) и JUnit (`unittest-xml-reporting` через `TEST_REPORTS_DIR`), артефакт `test-reports-<sha>` на 14 дней, загружается и при упавших тестах; dev-зависимости не попадают в образ; проверить: прогон в контейнере создаёт `junit.xml`, `coverage.xml`, `coverage-html/`, `actionlint` чист
 
@@ -16,6 +16,6 @@
 
 ## 4. Первый деплой
 
-- [ ] 4.1 На сервере `/srv/artai` и `.env` с секретами, сгенерированными на сервере; проверить: валидатор настроек проходит (`docker compose run --rm app python manage.py check --deploy`)
-- [ ] 4.2 Деплой образа из GHCR; проверить снаружи все сценарии из specs: HTTPS и сертификаты на 4 адресах, HTTP→HTTPS, `www` → `artai.win`, `/admin/` на `api` → 404, на `secure` — страница входа со стилями, `https://` в ссылках API
+- [x] 4.1 На сервере `/srv/artai` и `.env` с секретами, сгенерированными на сервере; проверить: валидатор настроек проходит (`docker compose run --rm app python manage.py check --deploy`)
+- [x] 4.2 Деплой образа из GHCR; проверить снаружи все сценарии из specs: HTTPS и сертификаты на 4 адресах, HTTP→HTTPS, `www` → `artai.win`, `/admin/` на `api` → 404, на `secure` — страница входа со стилями, `https://` в ссылках API
 - [ ] 4.3 Обновить `DEPLOY.md` (фактическая схема, команды деплоя/отката) и передать владельцу команду `createsuperuser`

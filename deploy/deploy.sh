@@ -22,7 +22,7 @@ set -euo pipefail
 cd "$1"
 if grep -q '^IMAGE_TAG=' .env; then sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$2/" .env; else echo "IMAGE_TAG=$2" >> .env; fi
 compose() { docker compose -f compose.prod.yaml "$@"; }
-compose pull --quiet app
+compose pull --quiet
 compose up -d --remove-orphans
 compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null 2>&1 || true
 compose ps --format '{{.Service}}\t{{.Status}}\t{{.Image}}'
