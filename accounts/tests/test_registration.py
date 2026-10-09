@@ -30,6 +30,8 @@ class RegistrationServiceTest(TestCase):
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].to, ['anna@example.com'])
         self.assertTrue(link_token(mail.outbox[0]))
+        self.assertEqual(mail.outbox[0].subject, 'Confirm your email')
+        self.assertTrue(mail.outbox[0].body.isascii())  # emails are in English
 
     def test_confirmed_email_taken(self):
         User.objects.create_user('anna@example.com', 'anna@example.com', STRONG)
