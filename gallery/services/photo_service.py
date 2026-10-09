@@ -6,7 +6,7 @@ from django.db import transaction
 from django.db.models import QuerySet
 
 from ..models import Gallery, Photo
-from .image_processor import ImageProcessor
+from .image_processor import ImageProcessor, ProcessedImage
 
 
 class PhotoService:
@@ -15,20 +15,36 @@ class PhotoService:
     def __init__(self, processor: ImageProcessor | None = None):
         self._processor = processor or ImageProcessor()
 
-    def create(self, file, gallery: Gallery, title: str = '') -> Photo:
-        photo = Photo(gallery=gallery, title=title)
+    def create(self, file, gallery: Gallery, title: str = '', description: str = '', tags=()) -> Photo:
+        photo = Photo(gallery=gallery, title=title, description=description, tags=list(tags))
         self.apply_image(photo, file)
         photo.save()
         return photo
 
-    def apply_image(self, photo: Photo, file) -> None:
-        """Store `file` untouched as the original (named by its SHA-256) plus a WebP thumb. Does not save the photo."""
+    def get_or_create(self, file, gallery: Gallery, title: str = '', description: str = '', tags=()) -> tuple[Photo, bool]:
+        """Like create, but if `gallery` already has a photo with the same content (after metadata removal),
+        returns it unchanged instead of adding a duplicate. Safe to retry."""
         processed = self._processor.process(file)
-        path = sharded_path(file_sha256(file))
-        photo.title = photo.title or Path(file.name).stem
+        existing = gallery.photos.filter(image=Photo.image.field.generate_filename(None, original_name(processed))).first()
+        if existing:
+            return existing, False
+        photo = Photo(gallery=gallery, title=title, description=description, tags=list(tags))
+        self._store(photo, file.name, processed)
+        photo.save()
+        return photo, True
+
+    def apply_image(self, photo: Photo, file) -> None:
+        """Store `file` without metadata as the original (named by the SHA-256 of the stored bytes) plus a WebP thumb.
+        Does not save the photo."""
+        self._store(photo, file.name, self._processor.process(file))
+
+    @staticmethod
+    def _store(photo: Photo, file_name: str, processed: ProcessedImage) -> None:
+        name = original_name(processed)
+        photo.title = photo.title or Path(file_name).stem
         photo.width, photo.height = processed.width, processed.height
-        store_once(photo.image, f'{path}.{processed.extension}', file)
-        store_once(photo.thumb, f'{path}.webp', ContentFile(processed.thumb))
+        store_once(photo.image, name, ContentFile(processed.original))
+        store_once(photo.thumb, f'{name.rsplit(".", 1)[0]}.webp', ContentFile(processed.thumb))
 
     def rebuild_thumb(self, photo: Photo) -> None:
         """Regenerate the thumb (and size) from the stored original, e.g. after changing thumb settings."""
@@ -74,6 +90,11 @@ def store_once(field_file, name: str, content) -> None:
         field_file.name = full_name
     else:
         field_file.save(name, content, save=False)
+
+
+def original_name(processed: ProcessedImage) -> str:
+    """'ab/cd/<sha256 of the stored bytes>.<ext>', relative to the upload_to folder."""
+    return f'{sharded_path(hashlib.sha256(processed.original).hexdigest())}.{processed.extension}'
 
 
 def file_sha256(file) -> str:

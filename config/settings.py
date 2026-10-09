@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.postgres',  # ArrayField (Photo.tags)
     'rest_framework',
     'drf_spectacular',
     'common',
@@ -159,6 +160,8 @@ MAILERS = {
 DEFAULT_FROM_EMAIL = ENV.email.sender
 
 FRONTEND_URL = ENV.frontend.url  # links in emails point to the SPA
+
+INGEST_API_KEY = ENV.ingest.api_key.get_secret_value()  # POST /ingest/photos; empty -> uploads off
 
 MEDIA_URL = ENV.media.url
 MEDIA_ROOT = BASE_DIR / ENV.media.root  # an absolute MEDIA_ROOT replaces BASE_DIR

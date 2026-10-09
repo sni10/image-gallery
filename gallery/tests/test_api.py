@@ -6,7 +6,7 @@ from ..models import Gallery
 from ..services import PhotoService
 from .utils import gallery, jpeg
 
-PHOTO_KEYS = {'id', 'title', 'url', 'thumbUrl', 'width', 'height', 'isFavorite'}
+PHOTO_KEYS = {'id', 'title', 'description', 'tags', 'url', 'thumbUrl', 'width', 'height', 'isFavorite'}
 
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp(), MEDIA_URL='/media/')  # URLs must not depend on local .env

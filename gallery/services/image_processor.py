@@ -3,6 +3,8 @@ from io import BytesIO
 
 from PIL import Image, ImageOps
 
+from .metadata import strip_metadata
+
 # Formats browsers can display, so the original can be served as is -> file extension
 SUPPORTED_FORMATS = {'JPEG': 'jpg', 'PNG': 'png', 'WEBP': 'webp', 'GIF': 'gif', 'AVIF': 'avif'}
 
@@ -13,14 +15,15 @@ class UnsupportedImageFormat(ValueError):
 
 @dataclass(frozen=True)
 class ProcessedImage:
-    extension: str  # of the original, from SUPPORTED_FORMATS
+    original: bytes  # the original without metadata (see metadata.py), same format and pixels
+    extension: str   # of the original, from SUPPORTED_FORMATS
     width: int      # size of the original as displayed (EXIF orientation applied)
     height: int
     thumb: bytes    # WebP
 
 
 class ImageProcessor:
-    """Inspects an original image and builds its WebP thumbnail. Knows nothing about Django."""
+    """Inspects an original image, strips its metadata and builds its WebP thumbnail. Knows nothing about Django."""
 
     def __init__(self, thumb_size=(400, 400), thumb_quality=80):
         self.thumb_size = thumb_size
@@ -33,10 +36,12 @@ class ImageProcessor:
                 raise UnsupportedImageFormat(f'{src.format} is not supported')
             extension = SUPPORTED_FORMATS[src.format]
             img = ImageOps.exif_transpose(src)
+            file.seek(0)
+            original = strip_metadata(file.read(), src.format)
         file.seek(0)
         width, height = img.size
         img.thumbnail(self.thumb_size)
-        return ProcessedImage(extension, width, height, self._webp(img))
+        return ProcessedImage(original, extension, width, height, self._webp(img))
 
     def _webp(self, img: Image.Image) -> bytes:
         if img.mode not in ('RGB', 'RGBA'):

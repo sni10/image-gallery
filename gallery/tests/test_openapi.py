@@ -8,7 +8,7 @@ PATHS = {
     '/photos', '/categories', '/galleries', '/galleries/{id}', '/galleries/{id}/photos',
     '/auth/register', '/auth/confirm-email', '/auth/resend-confirmation', '/auth/login', '/auth/refresh',
     '/auth/logout', '/auth/confirm-email-change', '/me', '/me/email', '/me/password',
-    '/me/favorites', '/me/favorites/{photo_id}',
+    '/me/favorites', '/me/favorites/{photo_id}', '/ingest/photos',
 }
 
 
@@ -55,6 +55,13 @@ class OpenApiSchemaTest(SimpleTestCase):
         login_body = self.schema['paths']['/auth/login']['post']['requestBody']['content']['application/json']
         self.assertEqual(login_body['schema']['$ref'], '#/components/schemas/Login')
         self.assertEqual(set(self.schema['components']['schemas']['TokenPair']['required']), {'access', 'refresh'})
+
+    def test_ingest_contract(self):
+        ingest = self.schema['paths']['/ingest/photos']['post']
+        self.assertEqual(set(ingest['responses']), {'200', '201', '400', '403', '404'})
+        self.assertEqual(list(ingest['requestBody']['content']), ['multipart/form-data'])
+        self.assertNotIn({'bearerAuth': []}, ingest.get('security', []))  # X-Api-Key, not the JWT
+        self.assertLessEqual({'description', 'tags'}, set(self.schema['components']['schemas']['Photo']['properties']))
 
 
 class OpenApiPagesTest(TestCase):

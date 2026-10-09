@@ -38,6 +38,7 @@ tags = ArrayField(models.CharField(max_length=50), default=list, blank=True)
 - `ArrayField`, а не отдельная модель `Tag` (M2M): БД — PostgreSQL, фильтр `tags__contains=['cat']` работает сразу.
   `ponytail:` модель `Tag` + GIN-индекс — когда понадобятся страница тега / облако тегов / поиск по тегам.
 - `PhotoService.create(file, gallery, title='')` получает `description=''` и `tags=()` — единая точка записи остаётся одна.
+- `ArrayField` требует `django.contrib.postgres` в `INSTALLED_APPS`.
 
 ### 1.3. Авторизация: API-ключ
 
@@ -86,7 +87,7 @@ Content-Type: multipart/form-data
 | `category` + `galleryTitle` | string | одно из двух | slug категории + название галереи: найти галерею с таким названием в категории, нет — создать |
 | `title` | string | нет | ≤ 200, пусто → имя файла (как сейчас) |
 | `description` | string | нет | ≤ 5000 |
-| `tags` | string | нет | через запятую: `cat, cyberpunk, neon`. Сервер: trim, убрать `#`, lower-case, без дублей, пустые выкинуть, ≤ 50 символов на тег, ≤ 30 тегов (лишнее → 400, не молча режем) |
+| `tags` | string | нет | через запятую или с новой строки: `cat, cyberpunk, neon`. Сервер: trim, убрать `#`, lower-case, без дублей, пустые выкинуть, ≤ 50 символов на тег, ≤ 30 тегов (лишнее → 400, не молча режем) |
 
 Почему `category` + `galleryTitle`: тогда в ComfyUI не нужно заранее создавать галерею в админке и копировать её id —
 нода может слать, например, `galleryTitle = "AI 2026-10"`, и галереи заводятся сами.
@@ -123,10 +124,9 @@ curl -X POST https://api.artai.win/ingest/photos \
 |---|---|
 | `gallery/models.py` | `description`, `tags` у `Photo` |
 | `gallery/migrations/0010_…` | `makemigrations` |
-| `gallery/services/photo_service.py` | `create(..., description='', tags=())`; `find_duplicate(file, gallery) -> Photo \| None` по SHA |
-| `gallery/services/gallery_queries.py` (или там же) | `get_or_create_by_title(category, title)` |
+| `gallery/services/photo_service.py` | `create(..., description='', tags=())`; `get_or_create(...) -> (Photo, created)` — дубль по SHA очищенного файла, картинка обрабатывается один раз |
 | `gallery/api/serializers.py` | `PhotoIngestSerializer` (вход, нормализация тегов, «одно из двух» для галереи); в `PhotoSerializer` добавить `description`, `tags` |
-| `gallery/api/views.py` | `PhotoIngestView(APIView)`: `authentication_classes = []`, `permission_classes = [HasIngestKey]`, `parser_classes = [MultiPartParser]`, `@extend_schema` как у соседей |
+| `gallery/api/views.py` | `PhotoIngestView(APIView)` (там же поиск/создание галереи по `category` + `galleryTitle`): `authentication_classes = []`, `permission_classes = [HasIngestKey]`, `parser_classes = [MultiPartParser]`, `@extend_schema` как у соседей |
 | `gallery/api/permissions.py` | `HasIngestKey` |
 | `gallery/api/urls.py` | `path('ingest/photos', PhotoIngestView.as_view(), name='photo-ingest')` |
 | `config/app_settings/schema.py`, `config/settings.py` | `IngestSettings` → `INGEST_API_KEY` |
@@ -138,7 +138,29 @@ curl -X POST https://api.artai.win/ingest/photos \
 Публичные `PhotoSerializer` получают `description` и `tags` — это добавление полей, не ломающее контракт.
 Фронт (`../image-gallery-front`) показывает их отдельной задачей.
 
-### 1.6. Тесты (`gallery/tests/test_ingest_api.py`)
+### 1.5а. Оригинал без метаданных
+
+Сейчас оригинал «хранится и отдаётся без изменений» — вместе с EXIF (GPS, камера), XMP, PNG-текстом
+(у ComfyUI: `prompt`/`workflow` с промптом и значениями полей нод, включая `api_key`). Меняем: сервер вычищает
+метаданные **у всех загрузок** — в `PhotoService.apply_image`, единой точке записи (API и админка).
+
+- Удаляется всё, кроме ICC-профиля (без него поплывут цвета) и EXIF Orientation (иначе повернётся) —
+  ориентация переписывается минимальным EXIF-блоком из одного тега.
+- Пиксели не перекодируются — правка на уровне байтов (`gallery/services/metadata.py`):
+  - PNG — выкинуть чанки `tEXt`/`zTXt`/`iTXt`/`eXIf`/`tIME`, `iCCP` остаётся;
+  - JPEG — выкинуть APPn, кроме APP0 (JFIF), APP2 `ICC_PROFILE` и APP14 `Adobe`, и COM; всё после EOI (MPF) отрезается;
+  - WebP — выкинуть чанки `EXIF`/`XMP `, поправить флаги `VP8X`;
+  - GIF — выкинуть комментарии и application-расширения, кроме `NETSCAPE2.0` (повтор анимации);
+  - AVIF — перекодировать (quality 90) **только если** в нём есть EXIF/XMP; чистый файл не трогается.
+    `ponytail:` байтовая чистка AVIF, если станет важно.
+- Очистка идемпотентна: очищенный файл при повторной очистке не меняется (имена файлов — хеши содержимого).
+- SHA-256 (имя файла и дедупликация) считается **по очищенным байтам**: одна картинка с разными метаданными — один файл.
+- Место: `ImageProcessor.process` отдаёт `original` (очищенные байты), `PhotoService` сохраняет их вместо исходного файла.
+  `help_text` у `Photo.image` → «Оригинал без метаданных».
+- Уже загруженные фото: management-команда `strip_photo_metadata` — для каждого файла в `original/` очистить,
+  пересчитать SHA, переложить, обновить `image` у ссылающихся фото (старый файл удалит сигнал/команда).
+
+### 1.6. Тесты (`gallery/tests/test_ingest_api.py`, `test_metadata.py`)
 
 - без ключа / неверный ключ / ключ не настроен → 403;
 - по `gallery` → 201, фото в галерее, `title`/`description`/`tags` сохранены, есть thumb;
@@ -147,11 +169,15 @@ curl -X POST https://api.artai.win/ingest/photos \
 - неизвестные галерея/категория → 404; оба способа или ни одного → 400; неподдерживаемый формат → 400;
 - нормализация тегов (`"#Cat, cat , ,Neon"` → `["cat", "neon"]`), лимиты → 400;
 - `PhotoSerializer` в `GET /galleries/<id>/photos` отдаёт `description`, `tags`;
+- метаданные (`test_metadata.py`): PNG с текстовыми чанками → у сохранённого оригинала `.text == {}`, ICC сохранён;
+  JPEG с EXIF/GPS → EXIF нет, пиксели побайтно совпадают (без перекодирования); два файла, отличающиеся только
+  метаданными → один файл в хранилище;
 - OpenAPI-схема строится (`test_openapi.py` уже это ловит).
 
 ### 1.7. Коммиты
 
 - `feat(gallery): add description and tags to photos`
+- `feat(gallery): strip metadata from uploaded originals`
 - `feat(api): add photo upload endpoint for automation with api key`
 - `build(deploy): add INGEST_API_KEY to env examples`
 
@@ -181,6 +207,9 @@ ComfyUI/custom_nodes/artai_sender/
 (`max(glob(...), key=os.path.getctime)`), расширения как в DWA — `png/jpg/jpeg/webp`. Файл отправляется как есть,
 без перекодирования. Вход `images` нужен только чтобы нода стояла в графе после SaveImage и запускалась.
 
+SaveImage пишет в PNG чанки `prompt` и `workflow` — значения полей всех нод, включая `api_key` и промпт.
+Флаг `--disable-metadata` не нужен: метаданные вычищает сервер при сохранении оригинала (см. 1.5а).
+
 ### 2.3. Входы
 
 | Вход | Тип | По умолчанию | Назначение |
@@ -188,7 +217,7 @@ ComfyUI/custom_nodes/artai_sender/
 | `images` | IMAGE | — | связь с пайплайном (как у Telegram/DeviantArt) |
 | `output_folder` | STRING | `output` | папка, где SaveImage сохраняет картинки |
 | `api_url` | STRING | `https://api.artai.win` | база API |
-| `api_key` | STRING | `""` | значение `INGEST_API_KEY` с сервера |
+| `api_key` | STRING | `""` | значение `INGEST_API_KEY` с сервера (попадёт в метаданные PNG — их чистит сервер, см. 1.5а) |
 | `gallery` | STRING | `""` | публичный id галереи; если задан — `category`/`gallery_title` игнорируются |
 | `category` | STRING | `"ai"` | slug категории |
 | `gallery_title` | STRING | `""` | название галереи; поддерживает `{date}` → `2026-10` (галерея на месяц) |
@@ -282,7 +311,8 @@ KSampler → VAE Decode ─┬─> Save Image
 
 ## Порядок работ
 
-1. API: модель + миграция → `PhotoService` → эндпоинт + ключ → тесты → релиз (`feat`).
+1. API: очистка метаданных (1.5а) → модель + миграция → `PhotoService` → эндпоинт + ключ → тесты → релиз (`feat`).
+   **Очистка — до первой публикации из ComfyUI**, иначе ключ уйдёт в сеть с первой же картинкой.
 2. На сервере: `INGEST_API_KEY` в `/srv/artai/.env`, деплой, проверка `curl` из 1.4.
 3. Нода: `artai_api.py` + тесты → `artai_node.py` → прогон на тестовой галерее.
 4. Фронт: показать `description` и `tags` на фото (отдельная задача в `image-gallery-front`).

@@ -2,7 +2,7 @@ from django.urls import path
 
 from .views import (
     CategoryListView, FavoriteListView, FavoriteView, GalleryDetailView, GalleryListView, GalleryPhotoListView,
-    RandomPhotoListView,
+    PhotoIngestView, RandomPhotoListView,
 )
 
 urlpatterns = [
@@ -13,4 +13,5 @@ urlpatterns = [
     path('galleries/<str:id>/photos', GalleryPhotoListView.as_view(), name='gallery-photos'),
     path('me/favorites', FavoriteListView.as_view(), name='favorite-list'),
     path('me/favorites/<str:photo_id>', FavoriteView.as_view(), name='favorite'),
+    path('ingest/photos', PhotoIngestView.as_view(), name='photo-ingest'),
 ]
