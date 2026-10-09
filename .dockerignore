@@ -7,3 +7,6 @@
 media
 staticfiles
 db.sqlite3
+reports
+.coverage
+htmlcov

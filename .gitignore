@@ -7,3 +7,6 @@ media/
 .idea/
 staticfiles/
 /DEPLOY.md
+reports/
+.coverage
+htmlcov/

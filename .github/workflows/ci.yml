@@ -1,0 +1,136 @@
+# Push and pull request to main: commit messages (Conventional Commits) + tests.
+# Push to main only, after green tests: semantic release (tag vX.Y.Z + GitHub Release, if commits warrant one)
+# and the image ghcr.io/<owner>/<repo>:<commit sha> (+ :vX.Y.Z when a release was made).
+# Deploy is manual: deploy/deploy.sh <sha> (see DEPLOY.md).
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  commits:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Lint commit messages
+        env:
+          FROM: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          TO: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          # first push of a branch has no "before": lint just the pushed commit
+          if [ -z "$FROM" ] || [ "$FROM" = "0000000000000000000000000000000000000000" ]; then FROM="$TO~1"; fi
+          npx --yes -p @commitlint/cli@21 -p @commitlint/config-conventional@21 \
+            commitlint --from "$FROM" --to "$TO" --verbose
+
+  test:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: image_gallery
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U ci -d image_gallery"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DJANGO_SECRET_KEY: ci-only-secret-key-used-for-tests-0123456789abcdefghij
+      DJANGO_DEBUG: 'true'
+      DB_NAME: image_gallery
+      DB_USER: ci
+      DB_PASSWORD: ci
+      DB_HOST: localhost
+      DB_PORT: '5432'
+      EMAIL_BACKEND: console
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          python-version: '3.14'
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run python manage.py makemigrations --check --dry-run
+      - name: Tests with coverage (JUnit report -> reports/junit.xml)
+        env:
+          TEST_REPORTS_DIR: reports
+        run: uv run coverage run manage.py test
+      - name: Coverage reports and summary
+        if: always()
+        run: |
+          uv run coverage xml -o reports/coverage.xml
+          uv run coverage html -d reports/coverage-html
+          { echo '### Coverage'; uv run coverage report --format=markdown; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-reports-${{ github.sha }}
+          path: reports/
+          retention-days: 14
+
+  release:
+    if: github.event_name == 'push'
+    needs: [commits, test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # tag + GitHub Release
+    outputs:
+      released: ${{ steps.release.outputs.released }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref_name }}  # a branch, not a detached HEAD: semantic release needs it
+          fetch-depth: 0
+      - name: Release exactly the tested commit, even if main moved on meanwhile
+        run: git reset --hard ${{ github.sha }}
+      - id: release
+        uses: python-semantic-release/python-semantic-release@v10.7.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          commit: false  # version lives in git tags, nothing is committed back to main
+          tag: true
+          push: true
+          changelog: false
+          vcs_release: true
+
+  image:
+    if: github.event_name == 'push'
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v7
+        with:
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ github.sha }}
+            ${{ needs.release.outputs.released == 'true' && format('ghcr.io/{0}:v{1}', github.repository, needs.release.outputs.version) || '' }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ needs.release.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

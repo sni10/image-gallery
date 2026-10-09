@@ -13,3 +13,31 @@ dependencies = [
     "pydantic-settings>=2.15.0",
     "pyjwt>=2.15.1",
 ]
+
+# Release versions come from Conventional Commits on main (python-semantic-release in CI):
+# fix -> patch, feat -> minor, "!" / BREAKING CHANGE -> major (minor while < 1.0). Source of truth: git tags vX.Y.Z.
+[tool.semantic_release]
+tag_format = "v{version}"
+commit_parser = "conventional"
+allow_zero_version = true
+major_on_zero = false
+
+[tool.semantic_release.branches.main]
+match = "main"
+prerelease = false
+
+[dependency-groups]
+dev = [
+    "coverage>=7.16.2",
+    "unittest-xml-reporting>=4.0.0",
+]
+
+# CI: `coverage run manage.py test` -> reports in the test-reports artifact (.github/workflows/ci.yml)
+[tool.coverage.run]
+branch = true
+source = ["accounts", "common", "config", "gallery"]
+omit = ["*/migrations/*", "*/tests/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true

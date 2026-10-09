@@ -1,0 +1,68 @@
+# Production entry point: HTTPS (Let's Encrypt, automatic), static files, reverse proxy to gunicorn.
+# Caddy is the only proxy in front of the app (settings.NUM_PROXIES = 1). It ignores client-sent
+# X-Forwarded-* headers and sets its own, so the app can trust X-Forwarded-Proto and the last XFF entry.
+{
+	email {$ACME_EMAIL}
+}
+
+# Uploaded originals and WebP thumbs: names are SHA-256 of the content, a URL never changes -> cache forever.
+(media) {
+	handle /media/* {
+		root * /srv
+		header Cache-Control "public, max-age=31536000, immutable"
+		header X-Content-Type-Options nosniff
+		file_server
+	}
+}
+
+# Admin CSS/JS after collectstatic: names are not hashed.
+(static) {
+	handle /static/* {
+		root * /srv
+		header Cache-Control "public, max-age=604800"
+		encode zstd gzip
+		file_server
+	}
+}
+
+(app) {
+	handle {
+		encode zstd gzip
+		reverse_proxy app:8000
+	}
+}
+
+# Frontend (SPA). Until the frontend is deployed /srv/frontend is empty -> 404.
+artai.win {
+	root * /srv/frontend
+	encode zstd gzip
+	try_files {path} /index.html
+	file_server
+}
+
+www.artai.win {
+	redir https://artai.win{uri} permanent
+}
+
+# Public API and images. The admin lives on secure.artai.win only.
+api.artai.win {
+	request_body {
+		max_size 500MB
+	}
+	import media
+	import static
+	handle /admin* {
+		respond 404
+	}
+	import app
+}
+
+# Admin (bulk uploads go here). Restrict to own IPs later if needed: `@outside not remote_ip ...` + respond 403.
+secure.artai.win {
+	request_body {
+		max_size 500MB
+	}
+	import media
+	import static
+	import app
+}

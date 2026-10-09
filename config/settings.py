@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 from .app_settings import load_settings
@@ -23,6 +24,17 @@ ENV = load_settings(BASE_DIR / '.env')
 SECRET_KEY = ENV.django.secret_key.get_secret_value()
 DEBUG = ENV.django.debug
 ALLOWED_HOSTS = ENV.django.allowed_hosts
+
+# The app is only reachable through our proxy (nginx locally, Caddy in prod), which sets X-Forwarded-Proto itself.
+# Without this Django treats proxied HTTPS requests as HTTP: image URLs become http:// and admin CSRF checks fail.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# CI sets TEST_REPORTS_DIR: tests also write a JUnit report there (unittest-xml-reporting, a dev dependency)
+if os.environ.get('TEST_REPORTS_DIR'):
+    TEST_RUNNER = 'xmlrunner.extra.djangotestrunner.XMLTestRunner'
+    TEST_OUTPUT_DIR = os.environ['TEST_REPORTS_DIR']
+    TEST_OUTPUT_FILE_NAME = 'junit.xml'
+SESSION_COOKIE_SECURE = CSRF_COOKIE_SECURE = not DEBUG
 
 
 
