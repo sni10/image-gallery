@@ -5,6 +5,12 @@
 	email {$ACME_EMAIL}
 }
 
+# HSTS: browsers that saw us use HTTPS only. Raised in steps (see DEPLOY.md): 300 s -> 1 week -> 1 year.
+# No includeSubDomains (mail.artai.win belongs to Brevo) and no preload until it has run at a year without issues.
+(hsts) {
+	header Strict-Transport-Security "max-age=300"
+}
+
 # Uploaded originals and WebP thumbs: names are SHA-256 of the content, a URL never changes -> cache forever.
 (media) {
 	handle /media/* {
@@ -34,6 +40,7 @@
 
 # Frontend: SSR Node server (front service, image from ../image-gallery-front). Vite's /assets/* have hashed names.
 artai.win {
+	import hsts
 	encode zstd gzip
 	@assets path /assets/*
 	header @assets >Cache-Control "public, max-age=31536000, immutable"
@@ -41,11 +48,13 @@ artai.win {
 }
 
 www.artai.win {
+	import hsts
 	redir https://artai.win{uri} permanent
 }
 
 # Public API and images. The admin lives on secure.artai.win only.
 api.artai.win {
+	import hsts
 	request_body {
 		max_size 500MB
 	}
@@ -61,6 +70,7 @@ api.artai.win {
 # X-Robots-Tag noindex, and crawlers / scripted clients get 403 before reaching the app (only browsers need the admin).
 # Restrict to own IPs later if needed: `@outside not remote_ip ...` + respond 403.
 secure.artai.win {
+	import hsts
 	header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex"
 	request_body {
 		max_size 500MB
