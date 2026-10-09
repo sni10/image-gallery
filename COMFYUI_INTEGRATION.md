@@ -138,6 +138,27 @@ curl -X POST https://api.artai.win/ingest/photos \
 Публичные `PhotoSerializer` получают `description` и `tags` — это добавление полей, не ломающее контракт.
 Фронт (`../image-gallery-front`) показывает их отдельной задачей.
 
+### 1.5а. Оригинал без метаданных
+
+Сейчас оригинал «хранится и отдаётся без изменений» — вместе с EXIF (GPS, камера), XMP, PNG-текстом
+(у ComfyUI: `prompt`/`workflow` с промптом и значениями полей нод, включая `api_key`). Меняем: сервер вычищает
+метаданные **у всех загрузок** — в `PhotoService.apply_image`, единой точке записи (API и админка).
+
+- Удаляется всё, кроме ICC-профиля (без него поплывут цвета) и EXIF Orientation (иначе повернётся; либо
+  применить поворот к пикселям и выкинуть тег).
+- Без потери качества:
+  - PNG — пересохранить через Pillow (формат lossless), без `pnginfo`; `icc_profile` оставить;
+  - JPEG — **не перекодировать** (потеря качества): выкинуть сегменты APP1 (EXIF/XMP), APP13 (IPTC), COM на уровне байтов,
+    APP2 (ICC) оставить;
+  - WebP lossless — пересохранить; WebP lossy — выкинуть чанки `EXIF`/`XMP ` из RIFF-контейнера, не перекодируя;
+  - GIF — пересохранить без комментариев; AVIF — пересохранить без `exif`/`xmp` (перекодирование, пусть с высоким
+    качеством; `ponytail:` байтовая чистка AVIF, если станет важно).
+- SHA-256 (имя файла и дедупликация) считается **по очищенным байтам**: одна картинка с разными метаданными — один файл.
+- Место: `ImageProcessor` (`strip_metadata(file) -> bytes`), `apply_image` сохраняет результат вместо исходного файла.
+  `help_text` у `Photo.image` → «Оригинал без метаданных».
+- Уже загруженные фото: management-команда `strip_photo_metadata` — для каждого файла в `original/` очистить,
+  пересчитать SHA, переложить, обновить `image` у ссылающихся фото (старый файл удалит сигнал/команда).
+
 ### 1.6. Тесты (`gallery/tests/test_ingest_api.py`)
 
 - без ключа / неверный ключ / ключ не настроен → 403;
@@ -147,11 +168,15 @@ curl -X POST https://api.artai.win/ingest/photos \
 - неизвестные галерея/категория → 404; оба способа или ни одного → 400; неподдерживаемый формат → 400;
 - нормализация тегов (`"#Cat, cat , ,Neon"` → `["cat", "neon"]`), лимиты → 400;
 - `PhotoSerializer` в `GET /galleries/<id>/photos` отдаёт `description`, `tags`;
+- метаданные (`test_services.py`): PNG с текстовыми чанками → у сохранённого оригинала `.text == {}`, ICC сохранён;
+  JPEG с EXIF/GPS → EXIF нет, пиксели побайтно совпадают (без перекодирования); два файла, отличающиеся только
+  метаданными → один файл в хранилище;
 - OpenAPI-схема строится (`test_openapi.py` уже это ловит).
 
 ### 1.7. Коммиты
 
 - `feat(gallery): add description and tags to photos`
+- `feat(gallery): strip metadata from uploaded originals`
 - `feat(api): add photo upload endpoint for automation with api key`
 - `build(deploy): add INGEST_API_KEY to env examples`
 
@@ -181,6 +206,9 @@ ComfyUI/custom_nodes/artai_sender/
 (`max(glob(...), key=os.path.getctime)`), расширения как в DWA — `png/jpg/jpeg/webp`. Файл отправляется как есть,
 без перекодирования. Вход `images` нужен только чтобы нода стояла в графе после SaveImage и запускалась.
 
+SaveImage пишет в PNG чанки `prompt` и `workflow` — значения полей всех нод, включая `api_key` и промпт.
+Флаг `--disable-metadata` не нужен: метаданные вычищает сервер при сохранении оригинала (см. 1.5а).
+
 ### 2.3. Входы
 
 | Вход | Тип | По умолчанию | Назначение |
@@ -188,7 +216,7 @@ ComfyUI/custom_nodes/artai_sender/
 | `images` | IMAGE | — | связь с пайплайном (как у Telegram/DeviantArt) |
 | `output_folder` | STRING | `output` | папка, где SaveImage сохраняет картинки |
 | `api_url` | STRING | `https://api.artai.win` | база API |
-| `api_key` | STRING | `""` | значение `INGEST_API_KEY` с сервера |
+| `api_key` | STRING | `""` | значение `INGEST_API_KEY` с сервера (попадёт в метаданные PNG — их чистит сервер, см. 1.5а) |
 | `gallery` | STRING | `""` | публичный id галереи; если задан — `category`/`gallery_title` игнорируются |
 | `category` | STRING | `"ai"` | slug категории |
 | `gallery_title` | STRING | `""` | название галереи; поддерживает `{date}` → `2026-10` (галерея на месяц) |
@@ -282,7 +310,8 @@ KSampler → VAE Decode ─┬─> Save Image
 
 ## Порядок работ
 
-1. API: модель + миграция → `PhotoService` → эндпоинт + ключ → тесты → релиз (`feat`).
+1. API: очистка метаданных (1.5а) → модель + миграция → `PhotoService` → эндпоинт + ключ → тесты → релиз (`feat`).
+   **Очистка — до первой публикации из ComfyUI**, иначе ключ уйдёт в сеть с первой же картинкой.
 2. На сервере: `INGEST_API_KEY` в `/srv/artai/.env`, деплой, проверка `curl` из 1.4.
 3. Нода: `artai_api.py` + тесты → `artai_node.py` → прогон на тестовой галерее.
 4. Фронт: показать `description` и `tags` на фото (отдельная задача в `image-gallery-front`).
