@@ -5,29 +5,29 @@ from django.core.mail import send_mail
 
 
 class AccountEmails:
-    """Plain-text account emails. Links point to the SPA (FRONTEND_URL), which posts the token to the API."""
+    """Plain-text account emails (English). Links point to the SPA (FRONTEND_URL), which posts the token to the API."""
 
     def send_confirmation(self, user, token: str) -> None:
         self._send(
-            user.email, 'Подтвердите email',
-            'Вы зарегистрировались в галерее. Чтобы активировать аккаунт, откройте ссылку '
-            f'(действует 24 часа):\n\n{self._link("confirm-email", token)}\n\n'
-            'Если это были не вы, просто проигнорируйте письмо.',
+            user.email, 'Confirm your email',
+            'Thanks for signing up for ArtAI. To activate your account, open this link '
+            f'(valid for 24 hours):\n\n{self._link("confirm-email", token)}\n\n'
+            "If you didn't sign up, just ignore this email.",
         )
 
     def send_email_change(self, new_email: str, token: str) -> None:
         self._send(
-            new_email, 'Подтвердите новый email',
-            'Чтобы сделать этот адрес email вашего аккаунта в галерее, откройте ссылку '
-            f'(действует 24 часа):\n\n{self._link("confirm-email-change", token)}\n\n'
-            'Если это были не вы, просто проигнорируйте письмо.',
+            new_email, 'Confirm your new email',
+            'To make this the email address of your ArtAI account, open this link '
+            f'(valid for 24 hours):\n\n{self._link("confirm-email-change", token)}\n\n'
+            "If you didn't request this, just ignore this email.",
         )
 
     def send_email_changed_notice(self, old_email: str, new_email: str) -> None:
         self._send(
-            old_email, 'Email аккаунта изменён',
-            f'Email вашего аккаунта в галерее изменён на {new_email}. '
-            'Если это были не вы, срочно обратитесь в поддержку.',
+            old_email, 'Your account email was changed',
+            f'The email address of your ArtAI account was changed to {new_email}. '
+            "If you didn't do this, contact support right away.",
         )
 
     @staticmethod

@@ -22,7 +22,7 @@ from .serializers import (
 UNAUTHORIZED = OpenApiResponse(description='Нет действующего access-токена')
 THROTTLED = OpenApiResponse(description='Больше 10 запросов в минуту с одного IP')
 
-BAD_LINK = 'Ссылка недействительна или устарела.'
+BAD_LINK = 'The link is invalid or has expired.'
 
 
 def validated(serializer_class, request):
@@ -101,9 +101,9 @@ class LoginView(AuthThrottled):
         try:
             pair = self.auth.login(data['email'], data['password'])
         except InvalidCredentials:
-            raise AuthenticationFailed('Неверный email или пароль.')
+            raise AuthenticationFailed('Invalid email or password.')
         except EmailNotConfirmed:
-            raise PermissionDenied({'detail': 'Email не подтверждён.', 'code': 'email_not_confirmed'})
+            raise PermissionDenied({'detail': 'Email is not confirmed.', 'code': 'email_not_confirmed'})
         return Response(asdict(pair))
 
 
@@ -118,7 +118,7 @@ class RefreshView(APIView):
         try:
             pair = self.auth.refresh(validated(RefreshSerializer, request)['refresh'])
         except InvalidRefreshToken:
-            raise AuthenticationFailed('Refresh-токен недействителен.')
+            raise AuthenticationFailed('Invalid refresh token.')
         return Response(asdict(pair))
 
 

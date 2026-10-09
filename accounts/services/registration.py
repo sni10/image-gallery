@@ -36,7 +36,7 @@ class RegistrationService:
         User = get_user_model()
         user = User.objects.select_for_update().filter(username=email).first()
         if user is not None and user.is_active:
-            raise ValidationError({'email': ['Этот email уже зарегистрирован.']})
+            raise ValidationError({'email': ['This email is already registered.']})
         user = user or User(username=email, email=email, is_active=False)
         try:
             validate_password(password, user)

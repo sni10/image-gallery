@@ -24,16 +24,16 @@ class ProfileService:
     def request_email_change(self, user, new_email: str, password: str) -> None:
         """Email a confirmation link to the new address; the current email stays until it is confirmed."""
         if not user.check_password(password):
-            raise ValidationError({'password': ['Неверный пароль.']})
+            raise ValidationError({'password': ['Incorrect password.']})
         new_email = normalize_email(new_email)
         try:
             validate_email(new_email)
         except ValidationError as exc:
             raise ValidationError({'new_email': exc.messages})
         if new_email == user.email:
-            raise ValidationError({'new_email': ['Это ваш текущий email.']})
+            raise ValidationError({'new_email': ['This is already your email.']})
         if _email_taken(new_email, user):
-            raise ValidationError({'new_email': ['Этот email уже зарегистрирован.']})
+            raise ValidationError({'new_email': ['This email is already registered.']})
         self._emails.send_email_change(new_email, self._tokens.make(user, CHANGE_EMAIL, new_email=new_email))
 
     @transaction.atomic
@@ -42,7 +42,7 @@ class ProfileService:
         user, payload = self._tokens.read(token, CHANGE_EMAIL)
         new_email = payload['new_email']
         if _email_taken(new_email, user):
-            raise ValidationError({'token': ['Этот email уже зарегистрирован другим аккаунтом.']})
+            raise ValidationError({'token': ['This email is already registered to another account.']})
         old_email = user.email
         user.email = user.username = new_email  # the email is the login
         user.save(update_fields=['email', 'username'])
@@ -53,7 +53,7 @@ class ProfileService:
     def change_password(self, user, current_password: str, new_password: str) -> TokenPair:
         """Set a new password and log out every other session: all refresh tokens are revoked."""
         if not user.check_password(current_password):
-            raise ValidationError({'current_password': ['Неверный пароль.']})
+            raise ValidationError({'current_password': ['Incorrect password.']})
         try:
             validate_password(new_password, user)
         except ValidationError as exc:

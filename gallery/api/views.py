@@ -140,7 +140,7 @@ class FavoriteView(APIView):
         try:
             FavoriteService.add(request.user, photo_id)
         except Photo.DoesNotExist:
-            raise NotFound('Фото не найдено.')
+            raise NotFound('Photo not found.')
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @extend_schema(
