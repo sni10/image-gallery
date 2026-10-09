@@ -61,6 +61,11 @@ class LoadSettingsTest(SimpleTestCase):
         self.assertInvalid('EMAIL_PORT', 'EMAIL_BACKEND', 'FRONTEND_URL',
                            EMAIL_PORT='0', EMAIL_BACKEND='sendmail', FRONTEND_URL='https://a.com/app')
 
+    def test_ingest_key(self):
+        self.assertEqual(self.load().ingest.api_key.get_secret_value(), '')  # uploads off by default
+        self.assertEqual(self.load(INGEST_API_KEY='a' * 64).ingest.api_key.get_secret_value(), 'a' * 64)
+        self.assertInvalid('INGEST_API_KEY', INGEST_API_KEY='short')
+
     def test_reads_env_file_and_env_vars_win(self):
         with tempfile.TemporaryDirectory() as tmp:
             env_file = Path(tmp) / '.env'

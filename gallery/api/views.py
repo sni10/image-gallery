@@ -1,18 +1,23 @@
 import re
 
 from django.shortcuts import get_object_or_404
+from PIL import UnidentifiedImageError
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import status
 from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.generics import ListAPIView, RetrieveAPIView
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from ..models import Gallery, Photo
-from ..services import CategoryQueries, FavoriteService, GalleryQueries, PhotoQueries
+from ..models import Category, Gallery, Photo
+from ..services import CategoryQueries, FavoriteService, GalleryQueries, PhotoQueries, PhotoService
 from .pagination import PageLimitPagination
-from .serializers import CategoryWithCountSerializer, GallerySerializer, PhotoSerializer
+from .permissions import HasIngestKey
+from .serializers import (
+    CategoryWithCountSerializer, GallerySerializer, PhotoIngestResultSerializer, PhotoIngestSerializer, PhotoSerializer,
+)
 
 SEED_RE = re.compile(r'^[A-Za-z0-9]{1,32}$')
 
@@ -150,3 +155,50 @@ class FavoriteView(APIView):
     def delete(self, request, photo_id):
         FavoriteService.remove(request.user, photo_id)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@extend_schema(
+    summary='Загрузить фото (автоматизация)',
+    description='Для скриптов и ComfyUI. Авторизация — заголовок `X-Api-Key` (INGEST_API_KEY на сервере), не Bearer. '
+                'Галерея — по `gallery` или по `category` + `galleryTitle` (нет такой — создаётся). '
+                'Метаданные оригинала (EXIF, XMP, текст PNG) удаляются. Повтор той же картинки в ту же галерею '
+                'не создаёт дубль: 200 и уже существующее фото, присланные title/description/tags не применяются.',
+    request={'multipart/form-data': PhotoIngestSerializer},
+    responses={
+        201: PhotoIngestResultSerializer,
+        200: OpenApiResponse(PhotoIngestResultSerializer, description='Такая картинка уже есть в этой галерее'),
+        400: OpenApiResponse(description='Ошибки по полям, например {"image": ["..."]} или {"tags": ["..."]}'),
+        403: OpenApiResponse(description='Нет или неверный X-Api-Key, либо загрузка выключена на сервере'),
+        404: OpenApiResponse(description='Галереи с таким id или категории с таким slug нет'),
+    },
+    auth=[],
+)
+class PhotoIngestView(APIView):
+    authentication_classes = []  # a stray Bearer header must not turn into a 401
+    permission_classes = [HasIngestKey]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        data = PhotoIngestSerializer(data=request.data)
+        data.is_valid(raise_exception=True)
+        fields = data.validated_data
+        gallery = self._gallery(fields)
+        try:
+            photo, created = PhotoService().get_or_create(
+                fields['image'], gallery, fields['title'], fields['description'], fields['tags'],
+            )
+        except (ValueError, UnidentifiedImageError) as exc:  # unsupported or broken image
+            raise ValidationError({'image': [str(exc) or 'Not a supported image']})
+        photo.is_favorite = False  # PhotoSerializer reads the annotation; an API key is not a user
+        body = PhotoIngestResultSerializer({'photo': photo}, context={'request': request}).data
+        return Response(body, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+    @staticmethod
+    def _gallery(fields) -> Gallery:
+        if 'gallery' in fields:
+            return get_object_or_404(Gallery.objects.select_related('category'), public_id=fields['gallery'])
+        category = get_object_or_404(Category, slug=fields['category'])
+        # ponytail: no unique (category, title); parallel first uploads could create two galleries. ComfyUI sends
+        # one at a time; add a UniqueConstraint if that changes
+        gallery = category.galleries.filter(title=fields['galleryTitle']).order_by('id').first()
+        return gallery or Gallery.objects.create(category=category, title=fields['galleryTitle'])

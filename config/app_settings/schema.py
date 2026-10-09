@@ -116,6 +116,21 @@ class StaticSettings(Section):
     root: Path = Path('staticfiles')  # `collectstatic` target served by nginx; relative to the project root
 
 
+class IngestSettings(Section):
+    """Photo upload API for automation (POST /ingest/photos, header X-Api-Key)."""
+
+    model_config = SettingsConfigDict(env_prefix='INGEST_')
+
+    api_key: SecretStr = SecretStr('')  # empty -> the endpoint is off (always 403). Generate: openssl rand -hex 32
+
+    @field_validator('api_key')
+    @classmethod
+    def check_key(cls, key):
+        if key.get_secret_value() and len(key.get_secret_value()) < 32:
+            raise ValueError('must be at least 32 chars (openssl rand -hex 32) or empty to disable uploads')
+        return key
+
+
 class AppSettings(BaseModel):
     django: DjangoSettings
     db: DatabaseSettings
@@ -124,3 +139,4 @@ class AppSettings(BaseModel):
     static: StaticSettings
     frontend: FrontendSettings
     email: EmailSettings
+    ingest: IngestSettings

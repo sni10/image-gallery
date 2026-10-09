@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
 from django.db import models
 
@@ -52,7 +53,10 @@ class Photo(PublicIdModel):
 
     gallery = models.ForeignKey(Gallery, on_delete=models.CASCADE, related_name='photos')
     title = models.CharField(max_length=200, blank=True, help_text='Если пусто — имя файла')
-    image = models.ImageField(upload_to='original/', help_text='Оригинал, хранится и отдаётся без изменений')
+    description = models.TextField(blank=True, default='')
+    # ponytail: a Tag model + GIN index once there are tag pages / tag search; tags__contains=['cat'] works now
+    tags = ArrayField(models.CharField(max_length=50), default=list, blank=True, help_text='Нижний регистр, без #')
+    image = models.ImageField(upload_to='original/', help_text='Оригинал без метаданных (EXIF, XMP, текст PNG)')
     thumb = models.ImageField(upload_to='thumb/', blank=True, editable=False)
     width = models.PositiveIntegerField(default=0, editable=False)
     height = models.PositiveIntegerField(default=0, editable=False)
