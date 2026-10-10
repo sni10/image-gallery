@@ -75,6 +75,22 @@ class GallerySerializer(serializers.ModelSerializer):
         fields = ['id', 'title', 'category', 'photosCount', 'cover']
 
 
+class PhotoGallerySerializer(serializers.ModelSerializer):
+    id = serializers.CharField(source='public_id', read_only=True, help_text='Публичный id: 26 символов [a-z2-7], не число')
+    category = CategorySerializer(read_only=True, help_text='Категория галереи, всегда заполнена')
+
+    class Meta:
+        model = Gallery
+        fields = ['id', 'title', 'category']
+
+
+class PhotoDetailSerializer(PhotoSerializer):
+    gallery = PhotoGallerySerializer(read_only=True, help_text='Галерея фото и её категория, для хлебных крошек')
+
+    class Meta(PhotoSerializer.Meta):
+        fields = [*PhotoSerializer.Meta.fields, 'gallery']
+
+
 TAG_SEPARATORS = re.compile(r'[,\n]')
 MAX_TAGS, MAX_TAG_LENGTH = 30, 50
 

@@ -16,7 +16,8 @@ from ..services import CategoryQueries, FavoriteService, GalleryQueries, PhotoQu
 from .pagination import PageLimitPagination
 from .permissions import HasIngestKey
 from .serializers import (
-    CategoryWithCountSerializer, GallerySerializer, PhotoIngestResultSerializer, PhotoIngestSerializer, PhotoSerializer,
+    CategoryWithCountSerializer, GallerySerializer, PhotoDetailSerializer, PhotoIngestResultSerializer,
+    PhotoIngestSerializer, PhotoSerializer,
 )
 
 SEED_RE = re.compile(r'^[A-Za-z0-9]{1,32}$')
@@ -157,8 +158,27 @@ class FavoriteView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class PhotoDetailView(APIView):
-    permission_classes = [IsAdminUser]
+class PhotoDetailView(RetrieveAPIView):
+    serializer_class = PhotoDetailSerializer
+    lookup_field = 'public_id'
+    lookup_url_kwarg = 'photo_id'
+
+    def get_permissions(self):  # reading is public, deleting is for admins
+        return [IsAdminUser()] if self.request.method == 'DELETE' else super().get_permissions()
+
+    def get_queryset(self):
+        photos = Photo.objects.select_related('gallery__category')
+        return PhotoQueries.with_is_favorite(photos, self.request.user)
+
+    @extend_schema(
+        summary='Фото',
+        description='Для страницы фото: фото, его галерея и категория.',
+        parameters=[PHOTO_ID],
+        responses={200: PhotoDetailSerializer,
+                   404: OpenApiResponse(description='Фото с таким id нет (в том числе старый id после перевыпуска)')},
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
 
     @extend_schema(
         summary='Удалить фото насовсем (админ)',
