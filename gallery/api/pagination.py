@@ -13,7 +13,7 @@ class PageLimitPagination(BasePagination):
         page = self._positive_int(request, 'page', 1)
         limit = min(self._positive_int(request, 'limit', self.default_limit), self.max_limit)
         self.total = queryset.count()
-        offset = (page - 1) * limit
+        self.offset = offset = (page - 1) * limit  # position of the first item in the whole list
         return list(queryset[offset:offset + limit])
 
     def get_paginated_response(self, data):

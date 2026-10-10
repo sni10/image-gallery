@@ -18,13 +18,27 @@
 	header Strict-Transport-Security "max-age=300"
 }
 
-# Uploaded originals and WebP thumbs: names are SHA-256 of the content, a URL never changes -> cache forever.
+# Thumbs are public: names are SHA-256 of the content, a URL never changes -> cache forever.
+# Originals only with a valid signed link from the API (?exp&sig): forward_auth asks the app (HMAC, no DB).
+# private: browsers may cache them, Cloudflare and other shared caches must not (they would skip the check).
 (media) {
-	handle /media/* {
+	handle /media/thumb/* {
 		root * /srv
 		header Cache-Control "public, max-age=31536000, immutable"
 		header X-Content-Type-Options nosniff
 		file_server
+	}
+	handle /media/original/* {
+		forward_auth app:8000 {
+			uri /internal/media-auth
+		}
+		root * /srv
+		header Cache-Control "private, max-age=3600"
+		header X-Content-Type-Options nosniff
+		file_server
+	}
+	handle /media/* {
+		respond 404
 	}
 }
 
@@ -90,6 +104,9 @@ Disallow: /
 	handle /admin* {
 		respond 404
 	}
+	handle /internal/* {
+		respond 404
+	}
 	import app
 }
 
@@ -111,6 +128,7 @@ Disallow: /
 " 200
 		respond @robots 403
 		respond @no_agent 403
+		respond /internal/* 404
 		import media
 		import static
 		import app

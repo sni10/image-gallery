@@ -1,5 +1,8 @@
 import re
+from urllib.parse import parse_qs, urlsplit
 
+from django.conf import settings
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from PIL import UnidentifiedImageError
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
@@ -13,6 +16,7 @@ from rest_framework.views import APIView
 
 from ..models import Category, Gallery, Photo
 from ..services import CategoryQueries, FavoriteService, GalleryQueries, PhotoQueries, PhotoService
+from ..services.signed_media import is_valid
 from .pagination import PageLimitPagination
 from .permissions import HasIngestKey
 from .serializers import (
@@ -79,7 +83,9 @@ class GalleryDetailView(RetrieveAPIView):
 @extend_schema(
     summary='Фото всех галерей в случайном порядке',
     description='Для главной. Порядок задаёт seed: с одним seed все страницы идут в одном порядке, '
-                'фото не повторяются и не пропадают. Новый seed — новый порядок.',
+                'фото не повторяются и не пропадают. Новый seed — новый порядок. '
+                'Гость: открыты первые 10 позиций ленты, и только из фото, открытых в своих галереях '
+                '(они идут первыми); остальные locked.',
     parameters=[OpenApiParameter(
         'seed', str, required=True, pattern=SEED_RE.pattern,
         description='Ключ случайного порядка: 1–32 латинских буквы или цифры. Сгенерируйте при заходе на страницу '
@@ -95,7 +101,18 @@ class RandomPhotoListView(ListAPIView):
         seed = self.request.query_params.get('seed', '')
         if not SEED_RE.fullmatch(seed):
             raise ValidationError({'seed': 'required, 1-32 latin letters or digits'})
-        return PhotoQueries.with_is_favorite(PhotoQueries.shuffled(seed), self.request.user)
+        user, photos = self.request.user, PhotoQueries.shuffled(seed)
+        if user.is_authenticated:
+            return PhotoQueries.for_user(photos, user)
+        return PhotoQueries.with_is_favorite(PhotoQueries.guest_feed(photos), user)
+
+    def paginate_queryset(self, queryset):
+        photos = super().paginate_queryset(queryset)
+        if not self.request.user.is_authenticated:  # guest: only the first positions of the whole feed are open
+            start = self.paginator.offset
+            for i, photo in enumerate(photos):
+                photo.locked = not (photo.guest_free and start + i < settings.GUEST_FREE_PHOTOS)
+        return photos
 
 
 @extend_schema(
@@ -112,7 +129,7 @@ class GalleryPhotoListView(ListAPIView):
         if getattr(self, 'swagger_fake_view', False):  # schema generation: no real request
             return Photo.objects.none()
         photos = get_object_or_404(Gallery, public_id=self.kwargs['id']).photos.all()
-        return PhotoQueries.with_is_favorite(photos, self.request.user)
+        return PhotoQueries.for_user(photos, self.request.user)
 
 
 UNAUTHORIZED = OpenApiResponse(description='Нет действующего access-токена')
@@ -131,7 +148,7 @@ class FavoriteListView(ListAPIView):
     def get_queryset(self):
         if getattr(self, 'swagger_fake_view', False):  # schema generation: no real user
             return Photo.objects.none()
-        return PhotoQueries.with_is_favorite(PhotoQueries.favorites_of(self.request.user), self.request.user)
+        return PhotoQueries.for_user(PhotoQueries.favorites_of(self.request.user), self.request.user)
 
 
 class FavoriteView(APIView):
@@ -168,7 +185,7 @@ class PhotoDetailView(RetrieveAPIView):
 
     def get_queryset(self):
         photos = Photo.objects.select_related('gallery__category')
-        return PhotoQueries.with_is_favorite(photos, self.request.user)
+        return PhotoQueries.for_user(photos, self.request.user)
 
     @extend_schema(
         summary='Фото',
@@ -227,7 +244,7 @@ class PhotoIngestView(APIView):
             )
         except (ValueError, UnidentifiedImageError) as exc:  # unsupported or broken image
             raise ValidationError({'image': [str(exc) or 'Not a supported image']})
-        photo.is_favorite = False  # PhotoSerializer reads the annotation; an API key is not a user
+        photo.is_favorite, photo.locked = False, False  # PhotoSerializer reads the annotations; the key opens everything
         body = PhotoIngestResultSerializer({'photo': photo}, context={'request': request}).data
         return Response(body, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
 
@@ -240,3 +257,13 @@ class PhotoIngestView(APIView):
         # one at a time; add a UniqueConstraint if that changes
         gallery = category.galleries.filter(title=fields['galleryTitle']).order_by('id').first()
         return gallery or Gallery.objects.create(category=category, title=fields['galleryTitle'])
+
+
+def media_auth(request):
+    """Caddy forward_auth target for /media/original/*: 204 if the link's signature is valid and not expired, else 403.
+    Caddy passes the original request URI in X-Forwarded-Uri. No DB, no DRF: it runs on every image request.
+    Reachable only from Caddy inside the stack: /internal/* answers 404 on every public host."""
+    uri = urlsplit(request.headers.get('X-Forwarded-Uri', ''))
+    query = parse_qs(uri.query)
+    exp, sig = (query.get(key, [None])[-1] for key in ('exp', 'sig'))
+    return HttpResponse(status=204 if is_valid(uri.path, exp, sig) else 403)

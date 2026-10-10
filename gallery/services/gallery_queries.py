@@ -27,9 +27,9 @@ class GalleryQueries:
 
     @staticmethod
     def attach_covers(galleries: list[Gallery], user) -> list[Gallery]:
-        """Set `gallery.display_cover` (Photo or None, with `is_favorite` for `user`) for galleries
+        """Set `gallery.display_cover` (Photo or None, with `is_favorite` and `locked` for `user`) for galleries
         from with_stats(), in one query."""
-        photos = PhotoQueries.with_is_favorite(Photo.objects.all(), user)
+        photos = PhotoQueries.for_user(Photo.objects.all(), user)
         covers = photos.in_bulk([g.display_cover_id for g in galleries if g.display_cover_id])
         for gallery in galleries:
             gallery.display_cover = covers.get(gallery.display_cover_id)
