@@ -1,6 +1,7 @@
 import re
 from urllib.parse import parse_qs, urlsplit
 
+from django.conf import settings
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from PIL import UnidentifiedImageError
@@ -82,7 +83,9 @@ class GalleryDetailView(RetrieveAPIView):
 @extend_schema(
     summary='Фото всех галерей в случайном порядке',
     description='Для главной. Порядок задаёт seed: с одним seed все страницы идут в одном порядке, '
-                'фото не повторяются и не пропадают. Новый seed — новый порядок.',
+                'фото не повторяются и не пропадают. Новый seed — новый порядок. '
+                'Гость: открыты первые 10 позиций ленты, и только из фото, открытых в своих галереях '
+                '(они идут первыми); остальные locked.',
     parameters=[OpenApiParameter(
         'seed', str, required=True, pattern=SEED_RE.pattern,
         description='Ключ случайного порядка: 1–32 латинских буквы или цифры. Сгенерируйте при заходе на страницу '
@@ -98,7 +101,18 @@ class RandomPhotoListView(ListAPIView):
         seed = self.request.query_params.get('seed', '')
         if not SEED_RE.fullmatch(seed):
             raise ValidationError({'seed': 'required, 1-32 latin letters or digits'})
-        return PhotoQueries.for_user(PhotoQueries.shuffled(seed), self.request.user, all_locked=True)  # home = showcase
+        user, photos = self.request.user, PhotoQueries.shuffled(seed)
+        if user.is_authenticated:
+            return PhotoQueries.for_user(photos, user)
+        return PhotoQueries.with_is_favorite(PhotoQueries.guest_feed(photos), user)
+
+    def paginate_queryset(self, queryset):
+        photos = super().paginate_queryset(queryset)
+        if not self.request.user.is_authenticated:  # guest: only the first positions of the whole feed are open
+            start = self.paginator.offset
+            for i, photo in enumerate(photos):
+                photo.locked = not (photo.guest_free and start + i < settings.GUEST_FREE_PHOTOS)
+        return photos
 
 
 @extend_schema(

@@ -45,10 +45,23 @@ class GuestLockTest(TestCase):
         self.assertTrue(all(p['url'] for p in items))
         self.assertTrue(all(p['url'] for p in self.items('/photos?seed=a&limit=20', self.user)))
 
-    def test_home_feed_locked_for_guests(self):
-        items = self.items('/photos?seed=a&limit=20')
-        self.assertEqual(len(items), 12)
-        self.assertTrue(all(p['locked'] and p['url'] is None and p['thumbUrl'] for p in items))
+    def test_home_feed_guest_sees_ten_positions_from_gallery_open_photos(self):
+        other = gallery('Other')
+        for i in range(12):
+            PhotoService().create(jpeg(60 + i, 20), other)
+        gallery_open = {p['id'] for g in (self.g, other)
+                        for p in self.items(f'/galleries/{g.public_id}/photos?limit=20') if not p['locked']}
+        self.assertEqual(len(gallery_open), 20)
+
+        seen = set()
+        for seed in ('a', 'b', 'c', 'zz9'):
+            feed = [p for page in (1, 2, 3, 4, 5) for p in self.items(f'/photos?seed={seed}&limit=5&page={page}')]
+            self.assertEqual(len({p['id'] for p in feed}), 24)  # pages continue the feed, no repeats or gaps
+            self.assertEqual([p['locked'] for p in feed], [False] * 10 + [True] * 14)
+            self.assertTrue(all(p['url'] for p in feed[:10]))
+            self.assertTrue(all(p['url'] is None and p['thumbUrl'] for p in feed[10:]))
+            seen |= {p['id'] for p in feed[:10]}
+        self.assertLessEqual(seen, gallery_open)  # trying seeds never opens a photo locked in its gallery
 
     def test_photo_detail_uses_position_in_gallery(self):
         third, eleventh = self.newest_first[2], self.newest_first[10]

@@ -33,22 +33,25 @@ class PhotoQueries:
         return ids.filter(pk__gt=photo.pk).order_by('pk').first(), ids.filter(pk__lt=photo.pk).order_by('-pk').first()
 
     @staticmethod
-    def with_locked(photos: QuerySet[Photo], user, all_locked: bool = False) -> QuerySet[Photo]:
+    def with_locked(photos: QuerySet[Photo], user) -> QuerySet[Photo]:
         """Annotate `locked`: a guest gets the original only for the GUEST_FREE_PHOTOS newest photos of each gallery
-        (gallery list order, -id), nothing at all with `all_locked` (the home feed). Signed-in users: never locked.
+        (gallery list order, -id). Signed-in users: never locked.
         Not a window function: GET /photos/{id} selects one row, where a row number would always be 1."""
         if user.is_authenticated:
             return photos.annotate(locked=Value(False, output_field=BooleanField()))
-        if all_locked:
-            return photos.annotate(locked=Value(True, output_field=BooleanField()))
-        n = settings.GUEST_FREE_PHOTOS
-        newer = Photo.objects.filter(gallery=OuterRef('gallery'), pk__gt=OuterRef('pk')).order_by()
-        return photos.annotate(locked=Exists(newer[n - 1:n]))  # at least n newer photos in the gallery
+        return photos.annotate(locked=_beyond_guest_free())
 
     @staticmethod
-    def for_user(photos: QuerySet[Photo], user, all_locked: bool = False) -> QuerySet[Photo]:
+    def for_user(photos: QuerySet[Photo], user) -> QuerySet[Photo]:
         """Both annotations PhotoSerializer reads: `is_favorite` and `locked`."""
-        return PhotoQueries.with_locked(PhotoQueries.with_is_favorite(photos, user), user, all_locked)
+        return PhotoQueries.with_locked(PhotoQueries.with_is_favorite(photos, user), user)
+
+    @staticmethod
+    def guest_feed(shuffled: QuerySet[Photo]) -> QuerySet[Photo]:
+        """The home feed for a guest: photos open in their galleries first (still in seed order), then the rest.
+        Annotates `guest_free`; the view opens only the first GUEST_FREE_PHOTOS positions, so any seed shows
+        originals a guest can see in the galleries anyway: trying seeds never reveals new ones."""
+        return shuffled.annotate(guest_free=~_beyond_guest_free()).order_by('-guest_free', 'shuffle_key', 'pk')
 
     @staticmethod
     def with_is_favorite(photos: QuerySet[Photo], user) -> QuerySet[Photo]:
@@ -56,3 +59,10 @@ class PhotoQueries:
         if not user.is_authenticated:
             return photos.annotate(is_favorite=Value(False, output_field=BooleanField()))
         return photos.annotate(is_favorite=Exists(Favorite.objects.filter(user=user, photo=OuterRef('pk'))))
+
+
+def _beyond_guest_free():
+    """True when the gallery has at least GUEST_FREE_PHOTOS newer photos than this one."""
+    n = settings.GUEST_FREE_PHOTOS
+    newer = Photo.objects.filter(gallery=OuterRef('gallery'), pk__gt=OuterRef('pk')).order_by()
+    return Exists(newer[n - 1:n])
