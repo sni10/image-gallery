@@ -27,7 +27,8 @@ class PageSitemap(FrontendSitemap):
 
 class CategorySitemap(FrontendSitemap):
     def items(self):  # only categories with photos, like the catalog
-        return Category.objects.annotate(updated=Max('galleries__photos__created_at')).filter(updated__isnull=False)
+        return (Category.objects.annotate(updated=Max('galleries__photos__created_at'))
+                .filter(updated__isnull=False).order_by('position', 'title'))
 
     def location(self, item):
         return f'/categories/{item.slug}'
