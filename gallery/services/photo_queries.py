@@ -25,6 +25,13 @@ class PhotoQueries:
         )
 
     @staticmethod
+    def neighbors(photo: Photo) -> tuple[str | None, str | None]:
+        """Public ids of the photos before and after `photo` in its gallery, in the gallery list order (-id).
+        Two indexed single-row queries, never the whole gallery."""
+        ids = Photo.objects.filter(gallery_id=photo.gallery_id).values_list('public_id', flat=True)
+        return ids.filter(pk__gt=photo.pk).order_by('pk').first(), ids.filter(pk__lt=photo.pk).order_by('-pk').first()
+
+    @staticmethod
     def with_is_favorite(photos: QuerySet[Photo], user) -> QuerySet[Photo]:
         """Annotate `is_favorite` for `user` with one EXISTS subquery (no N+1); always False for anonymous."""
         if not user.is_authenticated:

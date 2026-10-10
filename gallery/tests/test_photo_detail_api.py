@@ -52,3 +52,25 @@ class PhotoDetailApiTest(TestCase):
         self.assertEqual(self.delete(self.anna).status_code, 403)
         self.assertEqual(self.delete().status_code, 401)
         self.assertTrue(Photo.objects.filter(pk=self.photo.pk).exists())
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp(), ORIGINALS_ROOT=tempfile.mkdtemp())
+class PhotoNeighborsTest(TestCase):
+    def neighbors(self, photo):
+        body = self.client.get(f'/photos/{photo.public_id}').json()
+        return body['prevId'], body['nextId']
+
+    def test_order_matches_gallery_list_and_stays_inside_gallery(self):
+        g, other = gallery('G'), gallery('Other')
+        c, b = (PhotoService().create(jpeg(10 + i, 10), g) for i in range(2))  # c is older: created first
+        PhotoService().create(jpeg(30, 10), other)  # newer than all of g, never a neighbor
+        a = PhotoService().create(jpeg(40, 10), g)
+        listed = [p['id'] for p in self.client.get(f'/galleries/{g.public_id}/photos').json()['items']]
+        self.assertEqual(listed, [a.public_id, b.public_id, c.public_id])
+
+        self.assertEqual(self.neighbors(a), (None, b.public_id))
+        self.assertEqual(self.neighbors(b), (a.public_id, c.public_id))
+        self.assertEqual(self.neighbors(c), (b.public_id, None))
+
+    def test_single_photo(self):
+        self.assertEqual(self.neighbors(PhotoService().create(jpeg(10, 10), gallery('Solo'))), (None, None))
