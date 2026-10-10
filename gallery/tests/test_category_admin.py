@@ -7,7 +7,7 @@ from ..models import Category, Gallery
 from .utils import gallery, make_category
 
 
-@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp(), ORIGINALS_ROOT=tempfile.mkdtemp())
 class CategoryAdminTest(TestCase):
     def setUp(self):
         self.client.force_login(User.objects.create_superuser('admin', password='x'))

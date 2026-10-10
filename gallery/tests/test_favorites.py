@@ -12,7 +12,7 @@ from ..services import PhotoService
 from .utils import gallery, jpeg
 
 
-@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp(), ORIGINALS_ROOT=tempfile.mkdtemp())
 class FavoritesTest(TestCase):
     @classmethod
     def setUpTestData(cls):

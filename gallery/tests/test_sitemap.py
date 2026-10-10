@@ -6,7 +6,7 @@ from ..services import PhotoService
 from .utils import gallery, jpeg, make_category
 
 
-@override_settings(MEDIA_ROOT=tempfile.mkdtemp(), FRONTEND_URL='https://artai.win')
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp(), ORIGINALS_ROOT=tempfile.mkdtemp(), FRONTEND_URL='https://artai.win')
 class SitemapTest(TestCase):
     def test_lists_frontend_pages_with_photos_only(self):
         full = gallery('Full', make_category('ai'))

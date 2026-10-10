@@ -24,7 +24,7 @@ def all_ids(data):
             yield from all_ids(item)
 
 
-@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp(), ORIGINALS_ROOT=tempfile.mkdtemp())
 class PublicIdApiTest(TestCase):
     @classmethod
     def setUpTestData(cls):

@@ -9,7 +9,7 @@ from .utils import gallery, jpeg
 PHOTO_KEYS = {'id', 'title', 'description', 'tags', 'url', 'thumbUrl', 'width', 'height', 'isFavorite'}
 
 
-@override_settings(MEDIA_ROOT=tempfile.mkdtemp(), MEDIA_URL='/media/')  # URLs must not depend on local .env
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp(), ORIGINALS_ROOT=tempfile.mkdtemp(), MEDIA_URL='/media/')  # URLs must not depend on local .env
 class GalleryApiTest(TestCase):
     @classmethod
     def setUpTestData(cls):

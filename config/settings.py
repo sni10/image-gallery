@@ -166,6 +166,7 @@ INGEST_API_KEY = ENV.ingest.api_key.get_secret_value()  # POST /ingest/photos; e
 
 MEDIA_URL = ENV.media.url
 MEDIA_ROOT = BASE_DIR / ENV.media.root  # an absolute MEDIA_ROOT replaces BASE_DIR
+ORIGINALS_ROOT = BASE_DIR / ENV.media.originals_root  # clean originals: app only, outside the served media
 
 CORS_ALLOWED_ORIGINS = ENV.cors.allowed_origins
 

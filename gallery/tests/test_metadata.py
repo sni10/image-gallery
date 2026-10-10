@@ -120,7 +120,7 @@ class StripMetadataTest(SimpleTestCase):
             strip_metadata(encode('PNG')[:40], 'PNG')
 
 
-@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp(), ORIGINALS_ROOT=tempfile.mkdtemp())
 class StoredOriginalTest(TestCase):
     def test_original_stored_without_metadata(self):
         photo = PhotoService().create(SimpleUploadedFile('comfy.png', comfy_png()), gallery())

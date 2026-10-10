@@ -8,6 +8,7 @@ from django.test import TestCase, override_settings
 from PIL import Image
 
 from ..services import ImageProcessor, PhotoService, UnsupportedImageFormat
+from ..services.photo_service import originals_storage
 from .utils import gallery, image, jpeg
 
 
@@ -45,12 +46,12 @@ class ImageProcessorTest(TestCase):
             ImageProcessor().process(image(10, 10, 'x.tif', 'TIFF'))
 
 
-@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp(), ORIGINALS_ROOT=tempfile.mkdtemp())
 class PhotoServiceTest(TestCase):
     def setUp(self):
         self.gallery = gallery()
 
-    def test_original_stored_untouched_and_named_by_hash(self):
+    def test_clean_original_kept_private_served_file_watermarked_both_named_by_hash(self):
         upload = jpeg(4000, 3000, 'big.jpg')
         original_bytes = upload.read()
         photo = PhotoService().create(upload, self.gallery)
@@ -58,7 +59,9 @@ class PhotoServiceTest(TestCase):
         path = f'{digest[:2]}/{digest[2:4]}/{digest}'
 
         self.assertEqual(photo.image.name, f'original/{path}.jpg')
-        self.assertEqual(photo.image.read(), original_bytes)
+        self.assertEqual(originals_storage().open(photo.image.name).read(), original_bytes)
+        self.assertNotEqual(photo.image.read(), original_bytes)  # served one carries the watermark
+        self.assertEqual(Image.open(photo.image).size, (4000, 3000))
         self.assertEqual(photo.thumb.name, f'thumb/{path}.webp')
         self.assertEqual(Image.open(photo.thumb).size, (400, 300))
         self.assertEqual((photo.title, photo.width, photo.height), ('big', 4000, 3000))
@@ -102,3 +105,23 @@ class PhotoServiceTest(TestCase):
         with self.captureOnCommitCallbacks(execute=True):
             self.gallery.delete()  # cascade
         self.assertFalse(any(storage.exists(n) for n in names))
+
+    def test_same_content_one_clean_copy(self):
+        a = PhotoService().create(jpeg(800, 600, 'one.jpg'), self.gallery)
+        PhotoService().create(jpeg(800, 600, 'copy.jpg'), self.gallery)
+        folder = originals_storage().path(a.image.name).rsplit('/', 1)[0]
+        self.assertEqual(len(originals_storage().listdir(folder)[1]), 1)
+
+    def test_rebuild_thumb_reads_clean_copy(self):
+        photo = PhotoService().create(jpeg(800, 600), self.gallery)
+        with open(photo.image.path, 'wb') as served:  # served file no longer matches: the clean copy must be used
+            served.write(jpeg(10, 10).read())
+        PhotoService().rebuild_thumb(photo)
+        self.assertEqual((photo.width, photo.height), (800, 600))
+
+    def test_delete_removes_clean_copy(self):
+        photo = PhotoService().create(jpeg(800, 600), self.gallery)
+        name = photo.image.name
+        with self.captureOnCommitCallbacks(execute=True):
+            PhotoService.delete(self.gallery.photos.all())
+        self.assertFalse(originals_storage().exists(name))

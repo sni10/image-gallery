@@ -1,12 +1,15 @@
 import hashlib
 from pathlib import Path
 
+from django.conf import settings
 from django.core.files.base import ContentFile
+from django.core.files.storage import FileSystemStorage
 from django.db import transaction
 from django.db.models import QuerySet
 
 from ..models import Gallery, Photo
 from .image_processor import ImageProcessor, ProcessedImage
+from .watermark import watermark
 
 
 class PhotoService:
@@ -34,8 +37,8 @@ class PhotoService:
         return photo, True
 
     def apply_image(self, photo: Photo, file) -> None:
-        """Store `file` without metadata as the original (named by the SHA-256 of the stored bytes) plus a WebP thumb.
-        Does not save the photo."""
+        """Store `file` without metadata: watermarked in media (served), clean in the originals storage (private),
+        both named by the SHA-256 of the clean bytes; plus a WebP thumb without the watermark. Does not save the photo."""
         self._store(photo, file.name, self._processor.process(file))
 
     @staticmethod
@@ -43,12 +46,18 @@ class PhotoService:
         name = original_name(processed)
         photo.title = photo.title or Path(file_name).stem
         photo.width, photo.height = processed.width, processed.height
-        store_once(photo.image, name, ContentFile(processed.original))
-        store_once(photo.thumb, f'{name.rsplit(".", 1)[0]}.webp', ContentFile(processed.thumb))
+        store_once(photo.image, name, lambda: ContentFile(watermark(processed.original)))
+        store_once(photo.thumb, f'{name.rsplit(".", 1)[0]}.webp', lambda: ContentFile(processed.thumb))
+        originals = originals_storage()
+        if not originals.exists(photo.image.name):
+            originals.save(photo.image.name, ContentFile(processed.original))
 
     def rebuild_thumb(self, photo: Photo) -> None:
-        """Regenerate the thumb (and size) from the stored original, e.g. after changing thumb settings."""
-        with photo.image.open('rb') as original:
+        """Regenerate the thumb (and size) from the clean original, e.g. after changing thumb settings.
+        Photos stored before watermarking and not yet backfilled have no clean copy: their media file is clean."""
+        originals = originals_storage()
+        source = originals.open(photo.image.name) if originals.exists(photo.image.name) else photo.image.open('rb')
+        with source as original:
             processed = self._processor.process(original)
             path = sharded_path(file_sha256(original))
         name = f'{path}.webp'
@@ -81,6 +90,11 @@ class PhotoService:
         return deleted
 
 
+def originals_storage() -> FileSystemStorage:
+    """Clean originals under the same names as the watermarked files in media. No URL: never served."""
+    return FileSystemStorage(location=settings.ORIGINALS_ROOT)
+
+
 def store_once(field_file, name: str, content) -> None:
     """Content-addressed save: `name` is derived from the content hash, so an existing file with that name
     already holds identical bytes - point to it instead of writing a suffixed duplicate.
@@ -89,7 +103,7 @@ def store_once(field_file, name: str, content) -> None:
     if field_file.storage.exists(full_name):
         field_file.name = full_name
     else:
-        field_file.save(name, content, save=False)
+        field_file.save(name, content(), save=False)  # content is built only when the file is missing
 
 
 def original_name(processed: ProcessedImage) -> str:
