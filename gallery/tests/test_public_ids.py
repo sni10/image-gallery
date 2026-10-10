@@ -13,7 +13,7 @@ from .utils import gallery, jpeg, make_category
 migration = importlib.import_module('gallery.migrations.0009_public_ids')
 
 
-@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp(), ORIGINALS_ROOT=tempfile.mkdtemp())
 class PublicIdModelTest(TestCase):
     def test_new_record_gets_link_date_and_id(self):
         category = make_category('ai')

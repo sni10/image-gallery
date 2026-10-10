@@ -101,6 +101,7 @@ class MediaSettings(Section):
 
     root: Path = Path('media')  # relative paths are resolved against the project root
     url: str = 'media/'
+    originals_root: Path = Path('originals')  # clean originals without the watermark; never served
 
     @field_validator('url')
     @classmethod

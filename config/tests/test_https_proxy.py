@@ -7,7 +7,7 @@ from gallery.services import PhotoService
 from gallery.tests.utils import gallery, jpeg
 
 
-@override_settings(MEDIA_ROOT=tempfile.mkdtemp(), MEDIA_URL='/media/')  # relative, as in production
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp(), ORIGINALS_ROOT=tempfile.mkdtemp(), MEDIA_URL='/media/')  # relative, as in production
 class HttpsBehindProxyTest(TestCase):
     @classmethod
     def setUpTestData(cls):

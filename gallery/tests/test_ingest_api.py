@@ -19,7 +19,7 @@ def comfy_png(color=(10, 20, 30)):
     return SimpleUploadedFile('ComfyUI_00042_.png', buf.getvalue(), content_type='image/png')
 
 
-@override_settings(MEDIA_ROOT=tempfile.mkdtemp(), MEDIA_URL='/media/', INGEST_API_KEY=KEY)
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp(), ORIGINALS_ROOT=tempfile.mkdtemp(), MEDIA_URL='/media/', INGEST_API_KEY=KEY)
 class PhotoIngestApiTest(TestCase):
     @classmethod
     def setUpTestData(cls):

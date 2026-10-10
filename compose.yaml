@@ -20,6 +20,7 @@ services:
     env_file: .env
     volumes:
       - media:/app/media
+      - originals:/app/originals  # clean originals: app only, never mounted into the web server
       - static:/app/staticfiles
     depends_on:
       db:
@@ -48,4 +49,5 @@ services:
 volumes:
   pgdata:
   media:
+  originals:
   static:

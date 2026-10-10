@@ -5,6 +5,7 @@ from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from ..models import Category, Gallery, Photo
+from ..services import PhotoQueries
 
 
 class PhotoSerializer(serializers.ModelSerializer):
@@ -73,6 +74,42 @@ class GallerySerializer(serializers.ModelSerializer):
     class Meta:
         model = Gallery
         fields = ['id', 'title', 'category', 'photosCount', 'cover']
+
+
+class PhotoGallerySerializer(serializers.ModelSerializer):
+    id = serializers.CharField(source='public_id', read_only=True, help_text='Публичный id: 26 символов [a-z2-7], не число')
+    category = CategorySerializer(read_only=True, help_text='Категория галереи, всегда заполнена')
+
+    class Meta:
+        model = Gallery
+        fields = ['id', 'title', 'category']
+
+
+class PhotoDetailSerializer(PhotoSerializer):
+    gallery = PhotoGallerySerializer(read_only=True, help_text='Галерея фото и её категория, для хлебных крошек')
+    prevId = serializers.SerializerMethodField(
+        help_text='Id фото перед текущим в списке галереи (более новое); null, если текущее первое',
+    )
+    nextId = serializers.SerializerMethodField(
+        help_text='Id фото после текущего в списке галереи (более старое); null, если текущее последнее',
+    )
+
+    class Meta(PhotoSerializer.Meta):
+        fields = [*PhotoSerializer.Meta.fields, 'gallery', 'prevId', 'nextId']
+
+    @extend_schema_field(serializers.CharField(allow_null=True))
+    def get_prevId(self, obj):
+        return self._neighbors(obj)[0]
+
+    @extend_schema_field(serializers.CharField(allow_null=True))
+    def get_nextId(self, obj):
+        return self._neighbors(obj)[1]
+
+    @staticmethod
+    def _neighbors(obj):  # both fields from one pair of queries
+        if not hasattr(obj, '_neighbors'):
+            obj._neighbors = PhotoQueries.neighbors(obj)
+        return obj._neighbors
 
 
 TAG_SEPARATORS = re.compile(r'[,\n]')

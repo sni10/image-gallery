@@ -10,7 +10,7 @@ from ..services import PhotoService
 from .utils import gallery, image, jpeg
 
 
-@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp(), ORIGINALS_ROOT=tempfile.mkdtemp())
 class GalleryAdminTest(TestCase):
     def setUp(self):
         self.client.force_login(User.objects.create_superuser('admin', password='x'))

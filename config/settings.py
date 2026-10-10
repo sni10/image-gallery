@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django.contrib.postgres',  # ArrayField (Photo.tags)
+    'django.contrib.sitemaps',  # /sitemap.xml template
     'rest_framework',
     'drf_spectacular',
     'common',
@@ -165,6 +166,7 @@ INGEST_API_KEY = ENV.ingest.api_key.get_secret_value()  # POST /ingest/photos; e
 
 MEDIA_URL = ENV.media.url
 MEDIA_ROOT = BASE_DIR / ENV.media.root  # an absolute MEDIA_ROOT replaces BASE_DIR
+ORIGINALS_ROOT = BASE_DIR / ENV.media.originals_root  # clean originals: app only, outside the served media
 
 CORS_ALLOWED_ORIGINS = ENV.cors.allowed_origins
 

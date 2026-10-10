@@ -10,7 +10,7 @@ from ..models import Category, Gallery
 from .utils import gallery, make_category
 
 
-@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp(), ORIGINALS_ROOT=tempfile.mkdtemp())
 class CategoryModelTest(TestCase):
     def test_gallery_requires_category(self):
         with self.assertRaises(IntegrityError), transaction.atomic():
@@ -44,7 +44,7 @@ class CategoryModelTest(TestCase):
         self.assertEqual(list(Category.objects.values_list('slug', flat=True)), ['z', 'a', 'b'])
 
 
-@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp(), ORIGINALS_ROOT=tempfile.mkdtemp())
 class CategoryApiTest(TestCase):
     @classmethod
     def setUpTestData(cls):

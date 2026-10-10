@@ -18,7 +18,7 @@ def split(dt):
     return {'link_date_0': local.strftime('%Y-%m-%d'), 'link_date_1': local.strftime('%H:%M:%S')}
 
 
-@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp(), ORIGINALS_ROOT=tempfile.mkdtemp())
 class ReissueLinksAdminTest(TestCase):
     def setUp(self):
         self.admin = User.objects.create_superuser('admin', password='x')

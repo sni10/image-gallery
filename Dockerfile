@@ -17,8 +17,8 @@ RUN uv sync --locked --no-dev --no-install-project
 COPY . .
 
 RUN useradd --system --create-home --uid 1000 app \
-    && mkdir -p media staticfiles \
-    && chown -R app:app media staticfiles
+    && mkdir -p media originals staticfiles \
+    && chown -R app:app media originals staticfiles
 USER app
 
 EXPOSE 8000
