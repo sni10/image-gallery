@@ -28,7 +28,12 @@ class ProfileApiTest(ApiTestCase):
         self.assertEqual(r.status_code, 200)
         self.assertEqual((r.json()['id'], r.json()['email']), (self.user.profile.public_id, 'anna@example.com'))
         self.assertIn('dateJoined', r.json())
+        self.assertIs(r.json()['isAdmin'], False)
         self.assertEqual(self.client.get('/me').status_code, 401)
+
+    def test_me_is_admin_for_staff(self):
+        User.objects.filter(pk=self.user.pk).update(is_staff=True)
+        self.assertIs(self.client.get('/me', **self.auth()).json()['isAdmin'], True)
 
     def test_private_endpoints_need_token(self):
         for url in ('/me/email', '/me/password'):

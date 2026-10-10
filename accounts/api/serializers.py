@@ -32,6 +32,7 @@ class MeSerializer(serializers.Serializer):
     id = serializers.CharField(source='profile.public_id', help_text='Публичный id: 26 символов [a-z2-7], не число')
     email = serializers.EmailField()
     dateJoined = serializers.DateTimeField(source='date_joined')
+    isAdmin = serializers.BooleanField(source='is_staff', help_text='Может удалять фото: DELETE /photos/{photo_id}')
 
 
 class ChangeEmailSerializer(serializers.Serializer):

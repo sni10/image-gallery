@@ -6,7 +6,8 @@ media/
 .env
 .idea/
 staticfiles/
-/DEPLOY.md
 reports/
 .coverage
 htmlcov/
+
+.claude/settings.local.json
