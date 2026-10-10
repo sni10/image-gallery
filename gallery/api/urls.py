@@ -2,11 +2,12 @@ from django.urls import path
 
 from .views import (
     CategoryListView, FavoriteListView, FavoriteView, GalleryDetailView, GalleryListView, GalleryPhotoListView,
-    PhotoIngestView, RandomPhotoListView,
+    PhotoDetailView, PhotoIngestView, RandomPhotoListView,
 )
 
 urlpatterns = [
     path('photos', RandomPhotoListView.as_view(), name='photo-list'),
+    path('photos/<str:photo_id>', PhotoDetailView.as_view(), name='photo-detail'),
     path('categories', CategoryListView.as_view(), name='category-list'),
     path('galleries', GalleryListView.as_view(), name='gallery-list'),
     path('galleries/<str:id>', GalleryDetailView.as_view(), name='gallery-detail'),

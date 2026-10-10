@@ -5,7 +5,7 @@ from django.core.management import call_command
 from django.test import SimpleTestCase, TestCase
 
 PATHS = {
-    '/photos', '/categories', '/galleries', '/galleries/{id}', '/galleries/{id}/photos',
+    '/photos', '/photos/{photo_id}', '/categories', '/galleries', '/galleries/{id}', '/galleries/{id}/photos',
     '/auth/register', '/auth/confirm-email', '/auth/resend-confirmation', '/auth/login', '/auth/refresh',
     '/auth/logout', '/auth/confirm-email-change', '/me', '/me/email', '/me/password',
     '/me/favorites', '/me/favorites/{photo_id}', '/ingest/photos',

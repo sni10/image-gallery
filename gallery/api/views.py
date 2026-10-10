@@ -7,7 +7,7 @@ from rest_framework import status
 from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.generics import ListAPIView, RetrieveAPIView
 from rest_framework.parsers import FormParser, MultiPartParser
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -154,6 +154,24 @@ class FavoriteView(APIView):
     )
     def delete(self, request, photo_id):
         FavoriteService.remove(request.user, photo_id)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class PhotoDetailView(APIView):
+    permission_classes = [IsAdminUser]
+
+    @extend_schema(
+        summary='Удалить фото насовсем (админ)',
+        description='Только для is_staff, без восстановления. Файлы удаляются, если на них не ссылаются другие фото; '
+                    'обложка галереи сбрасывается на случайное фото; фото пропадает из избранного.',
+        parameters=[PHOTO_ID],
+        responses={204: OpenApiResponse(description='Удалено'), 401: UNAUTHORIZED,
+                   403: OpenApiResponse(description='Пользователь не админ'),
+                   404: OpenApiResponse(description='Фото с таким id нет: уже удалено или id перевыпущен')},
+    )
+    def delete(self, request, photo_id):
+        if not PhotoService.delete(Photo.objects.filter(public_id=photo_id)):
+            raise NotFound('Photo not found.')
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
