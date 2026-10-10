@@ -53,7 +53,16 @@ artai.win {
 	encode zstd gzip
 	@assets path /assets/*
 	header @assets >Cache-Control "public, max-age=31536000, immutable"
-	reverse_proxy front:5173
+	# sitemap is built by the API from the DB; Host must be one the app allows, urls inside point to artai.win
+	handle /sitemap.xml {
+		reverse_proxy app:8000 {
+			header_up Host api.artai.win
+			header_up X-Forwarded-For {client_ip}
+		}
+	}
+	handle {
+		reverse_proxy front:5173
+	}
 }
 
 www.artai.win {
@@ -62,8 +71,17 @@ www.artai.win {
 }
 
 # Public API and images. The admin lives on secure.artai.win only.
+# Robots: images are indexable (Google Images, og:image previews), JSON is not.
 api.artai.win {
 	import hsts
+	@not_media not path /media/*
+	header @not_media X-Robots-Tag "noindex"
+	handle /robots.txt {
+		respond "User-agent: *
+Allow: /media/
+Disallow: /
+" 200
+	}
 	request_body {
 		max_size 500MB
 	}

@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django.contrib.postgres',  # ArrayField (Photo.tags)
+    'django.contrib.sitemaps',  # /sitemap.xml template
     'rest_framework',
     'drf_spectacular',
     'common',
