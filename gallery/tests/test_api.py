@@ -6,7 +6,7 @@ from ..models import Gallery
 from ..services import PhotoService
 from .utils import gallery, jpeg
 
-PHOTO_KEYS = {'id', 'title', 'description', 'tags', 'url', 'thumbUrl', 'width', 'height', 'isFavorite'}
+PHOTO_KEYS = {'id', 'title', 'description', 'tags', 'url', 'thumbUrl', 'width', 'height', 'isFavorite', 'locked'}
 
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp(), ORIGINALS_ROOT=tempfile.mkdtemp(), MEDIA_URL='/media/')  # URLs must not depend on local .env
@@ -65,7 +65,7 @@ class GalleryApiTest(TestCase):
         item = data['items'][0]
         self.assertEqual(set(item), PHOTO_KEYS)
         self.assertEqual((item['width'], item['height']), (1600, 1067))  # original size
-        self.assertRegex(item['url'], r'^http://testserver/media/original/\w\w/\w\w/\w{64}\.jpg$')
+        self.assertRegex(item['url'], r'^http://testserver/media/original/\w\w/\w\w/\w{64}\.jpg\?exp=\d+&sig=\w{64}$')  # signed, expiring
         self.assertRegex(item['thumbUrl'], r'^http://testserver/media/thumb/\w\w/\w\w/\w{64}\.webp$')
         self.assertLessEqual({p['id'] for p in data['items']}, self.photo_ids)
         self.assertEqual(self.client.get(f'/galleries/{self.empty.public_id}/photos').json(), {'items': [], 'total': 0})

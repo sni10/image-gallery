@@ -1,4 +1,5 @@
 import re
+from urllib.parse import urlsplit
 
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema_field
@@ -6,15 +7,22 @@ from rest_framework import serializers
 
 from ..models import Category, Gallery, Photo
 from ..services import PhotoQueries
+from ..services.signed_media import signed_query
 
 
 class PhotoSerializer(serializers.ModelSerializer):
     id = serializers.CharField(source='public_id', read_only=True, help_text='Публичный id: 26 символов [a-z2-7], не число')
     url = serializers.SerializerMethodField(
-        help_text='Оригинал без метаданных (jpg/png/webp/gif/avif), абсолютная ссылка. Для лайтбокса и зума 1:1',
+        help_text='Оригинал со знаком (jpg/png/webp/gif/avif), подписанная ссылка с ограниченным сроком (exp, sig). '
+                  'null, если фото закрыто (locked). Для лайтбокса и зума 1:1',
     )
     thumbUrl = serializers.SerializerMethodField(
-        method_name='get_thumb_url', help_text='Превью WebP, не больше 400px по длинной стороне, абсолютная ссылка',
+        method_name='get_thumb_url', help_text='Превью WebP, не больше 400px по длинной стороне, абсолютная ссылка, '
+                                               'без срока. null только у закрытого фото без превью',
+    )
+    locked = serializers.SerializerMethodField(
+        help_text='Фото закрыто для гостя: url = null, показывать превью и предлагать вход. '
+                  'Гостю открыты 10 новых фото каждой галереи, в общей ленте GET /photos закрыты все. С токеном всегда false',
     )
     isFavorite = serializers.BooleanField(
         source='is_favorite', read_only=True, help_text='В избранном у текущего пользователя; для анонима всегда false',
@@ -22,7 +30,7 @@ class PhotoSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Photo
-        fields = ['id', 'title', 'description', 'tags', 'url', 'thumbUrl', 'width', 'height', 'isFavorite']
+        fields = ['id', 'title', 'description', 'tags', 'url', 'thumbUrl', 'width', 'height', 'isFavorite', 'locked']
         extra_kwargs = {
             'title': {'help_text': 'Название; если не задано — имя загруженного файла'},
             'description': {'help_text': 'Описание, может быть пустым'},
@@ -31,16 +39,24 @@ class PhotoSerializer(serializers.ModelSerializer):
             'height': {'help_text': 'Высота оригинала в px с учётом поворота по EXIF'},
         }
 
-    @extend_schema_field(OpenApiTypes.URI)
+    @extend_schema_field(OpenApiTypes.BOOL)
+    def get_locked(self, obj):
+        locked = getattr(obj, 'locked', None)  # from PhotoQueries.with_locked
+        return locked if locked is not None else not self.context['request'].user.is_authenticated  # fail closed
+
+    @extend_schema_field(serializers.URLField(allow_null=True))
     def get_url(self, obj):
-        return self._absolute(obj.image)
+        return None if self.get_locked(obj) else self._signed(obj.image)
 
-    @extend_schema_field(OpenApiTypes.URI)
+    @extend_schema_field(serializers.URLField(allow_null=True))
     def get_thumb_url(self, obj):
-        return self._absolute(obj.thumb or obj.image)
+        if obj.thumb:
+            return self.context['request'].build_absolute_uri(obj.thumb.url)
+        return None if self.get_locked(obj) else self._signed(obj.image)  # never the original of a locked photo
 
-    def _absolute(self, file):
-        return self.context['request'].build_absolute_uri(file.url)
+    def _signed(self, file):
+        url = file.url
+        return self.context['request'].build_absolute_uri(f'{url}?{signed_query(urlsplit(url).path)}')
 
 
 class CategorySerializer(serializers.ModelSerializer):

@@ -14,6 +14,8 @@ import os
 import tempfile
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+
 from .app_settings import load_settings
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -67,6 +69,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'common.middleware.vary_on_authorization',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -167,6 +170,14 @@ INGEST_API_KEY = ENV.ingest.api_key.get_secret_value()  # POST /ingest/photos; e
 MEDIA_URL = ENV.media.url
 MEDIA_ROOT = BASE_DIR / ENV.media.root  # an absolute MEDIA_ROOT replaces BASE_DIR
 ORIGINALS_ROOT = BASE_DIR / ENV.media.originals_root  # clean originals: app only, outside the served media
+# Originals are served only via signed expiring links (gallery/services/signed_media.py)
+MEDIA_SIGNING_KEY = ENV.media.signing_key.get_secret_value()
+if not MEDIA_SIGNING_KEY:
+    if not DEBUG:
+        raise ImproperlyConfigured('MEDIA_SIGNING_KEY is required when DJANGO_DEBUG=false (openssl rand -hex 32)')
+    MEDIA_SIGNING_KEY = f'dev-media-{SECRET_KEY}'
+MEDIA_URL_TTL = ENV.media.url_ttl
+GUEST_FREE_PHOTOS = 10  # a guest sees originals of this many newest photos per gallery, the rest only as thumbs
 
 CORS_ALLOWED_ORIGINS = ENV.cors.allowed_origins
 

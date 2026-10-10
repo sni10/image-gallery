@@ -102,6 +102,8 @@ class MediaSettings(Section):
     root: Path = Path('media')  # relative paths are resolved against the project root
     url: str = 'media/'
     originals_root: Path = Path('originals')  # clean originals without the watermark; never served
+    signing_key: SecretStr = SecretStr('')  # signs links to originals; required when DJANGO_DEBUG=false
+    url_ttl: int = Field(6 * 3600, ge=3600, description='Lifetime of a signed link to an original, seconds')
 
     @field_validator('url')
     @classmethod
