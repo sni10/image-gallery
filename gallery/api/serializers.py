@@ -224,7 +224,26 @@ class FeedFiltersSerializer(serializers.Serializer):
                               help_text='Поиск: часть тега, описания, названия фото, галереи или категории; 2–100 символов')
 
     def validate_tag(self, value):
-        tag = value.lstrip('#').strip().lower()
-        if not tag or len(tag) > MAX_TAG_LENGTH:
-            raise serializers.ValidationError(f'Must be 1-{MAX_TAG_LENGTH} characters.')
-        return tag
+        return clean_tag(value)
+
+
+def clean_tag(value: str) -> str:
+    """A tag from a query string: case, a leading # and outer spaces don't matter."""
+    tag = value.lstrip('#').strip().lower()
+    if not tag or len(tag) > MAX_TAG_LENGTH:
+        raise serializers.ValidationError(f'Must be 1-{MAX_TAG_LENGTH} characters.')
+    return tag
+
+
+class TagsQuerySerializer(serializers.Serializer):
+    related = serializers.CharField(required=False, help_text='Тег: отдать теги, которые стоят на одних фото с ним. '
+                                                              'Регистр, # и пробелы по краям не важны')
+    limit = serializers.IntegerField(required=False, min_value=1, max_value=50, default=20, help_text='1–50')
+
+    def validate_related(self, value):
+        return clean_tag(value)
+
+
+class TagCountSerializer(serializers.Serializer):
+    tag = serializers.CharField()
+    count = serializers.IntegerField(help_text='С related — число общих фото с этим тегом, без — число фото с тегом')

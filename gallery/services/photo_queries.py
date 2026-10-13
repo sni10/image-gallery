@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.db import connection
 from django.db.models import (
     BooleanField, Case, CharField, Count, Exists, IntegerField, OuterRef, Q, QuerySet, Subquery, Value, When,
 )
@@ -58,6 +59,17 @@ class PhotoQueries:
         """Most favorited first. The count orders only, it is never exposed.
         ponytail: Count over all favorites per request; denormalize Photo.favorites_count if it gets slow."""
         return Photo.objects.annotate(favorites_n=Count('favorited_by')).order_by('-favorites_n', '-pk')
+
+    @staticmethod
+    def tag_counts(limit: int, related: str | None = None) -> list[tuple[str, int]]:
+        """Most used tags with their photo counts, or, for `related`, the tags most often on the same photos
+        (count = shared photos; `related` itself is left out). Ties by name.
+        ponytail: walks all photos (the GIN index narrows `related`); cache for a minute if it gets slow."""
+        where, params = ('WHERE tags @> ARRAY[%s]::varchar[] AND t <> %s', [related, related]) if related else ('', [])
+        with connection.cursor() as cursor:
+            cursor.execute(f'SELECT t, count(*) FROM {Photo._meta.db_table}, unnest(tags) t {where} '
+                           'GROUP BY t ORDER BY 2 DESC, 1 LIMIT %s', [*params, limit])
+            return cursor.fetchall()
 
     @staticmethod
     def search(photos: QuerySet[Photo], q: str) -> QuerySet[Photo]:

@@ -21,7 +21,7 @@ from .pagination import PageLimitPagination
 from .permissions import HasIngestKey
 from .serializers import (
     CategoryWithCountSerializer, FeedFiltersSerializer, GallerySerializer, PhotoDetailSerializer,
-    PhotoIngestResultSerializer, PhotoIngestSerializer, PhotoSerializer,
+    PhotoIngestResultSerializer, PhotoIngestSerializer, PhotoSerializer, TagCountSerializer, TagsQuerySerializer,
 )
 
 SEED_RE = re.compile(r'^[A-Za-z0-9]{1,32}$')
@@ -258,6 +258,22 @@ class SimilarPhotoListView(APIView):
         photo = get_object_or_404(Photo.objects.select_related('gallery'), public_id=photo_id)
         photos = PhotoQueries.for_user(PhotoQueries.similar(photo), request.user)[:limit]
         return Response({'items': PhotoSerializer(photos, many=True, context={'request': request}).data})
+
+
+@extend_schema(
+    summary='Теги: самые частые или связанные с тегом',
+    description='Для строки тегов на странице тега. Без авторизации, без пагинации. Порядок: count по убыванию, '
+                'при равенстве по имени. Неизвестный тег — пустой список.',
+    parameters=[TagsQuerySerializer],
+    responses={200: inline_serializer('TagList', {'items': TagCountSerializer(many=True)}),
+               400: OpenApiResponse(description='limit не от 1 до 50 или пустой related, например {"limit": ["..."]}')},
+)
+class TagListView(APIView):
+    def get(self, request):
+        params = TagsQuerySerializer(data=request.query_params.dict())  # a QueryDict treats related= as absent
+        params.is_valid(raise_exception=True)
+        rows = PhotoQueries.tag_counts(params.validated_data['limit'], params.validated_data.get('related'))
+        return Response({'items': [{'tag': tag, 'count': count} for tag, count in rows]})
 
 
 @extend_schema(

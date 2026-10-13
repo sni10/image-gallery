@@ -10,6 +10,7 @@ PATHS = {
     '/auth/logout', '/auth/confirm-email-change', '/me', '/me/email', '/me/password',
     '/me/favorites', '/me/favorites/{photo_id}', '/ingest/photos', '/complaints', '/photos/{photo_id}/similar',
     '/me/collections', '/me/collections/{id}', '/me/collections/{id}/photos', '/me/collections/{id}/photos/{photo_id}',
+    '/tags',
 }
 
 
