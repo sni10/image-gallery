@@ -57,6 +57,10 @@ class MeSerializer(serializers.Serializer):
     isAdmin = serializers.BooleanField(source='is_staff', help_text='Может удалять фото: DELETE /photos/{photo_id}')
 
 
+class PasswordSerializer(serializers.Serializer):
+    password = serializers.CharField(write_only=True, trim_whitespace=False, help_text='Текущий пароль')
+
+
 class ChangeEmailSerializer(serializers.Serializer):
     newEmail = serializers.CharField(max_length=254)
     password = serializers.CharField(write_only=True, trim_whitespace=False, help_text='Текущий пароль')

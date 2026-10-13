@@ -10,13 +10,13 @@ from rest_framework.views import APIView
 
 from ..services.auth import AuthService, EmailNotConfirmed, InvalidCredentials
 from ..services.email_tokens import InvalidEmailToken
-from ..services.profile import ProfileService
+from ..services.profile import AdminAccountProtected, ProfileService
 from ..services.registration import RegistrationService
 from ..services.token_pairs import InvalidRefreshToken
 from ..throttling import IPScopedRateThrottle
 from .serializers import (
     ChangedEmailSerializer, ChangeEmailSerializer, ChangePasswordSerializer, EmailSerializer, LoginSerializer,
-    MeSerializer, RefreshSerializer, RegisteredSerializer, RegisterSerializer, TokenPairSerializer, TokenSerializer,
+    MeSerializer, PasswordSerializer, RefreshSerializer, RegisteredSerializer, RegisterSerializer, TokenPairSerializer, TokenSerializer,
 )
 
 UNAUTHORIZED = OpenApiResponse(description='Нет действующего access-токена')
@@ -136,10 +136,32 @@ class LogoutView(APIView):
 
 class MeView(APIView):
     permission_classes = [IsAuthenticated]
+    throttle_scope = 'delete_account'
+    profile = ProfileService()
+
+    def get_throttles(self):  # only DELETE checks a password
+        return [IPScopedRateThrottle()] if self.request.method == 'DELETE' else []
 
     @extend_schema(summary='Текущий пользователь', responses={200: MeSerializer, 401: UNAUTHORIZED})
     def get(self, request):
         return Response(MeSerializer(request.user).data)
+
+    @extend_schema(
+        summary='Удалить аккаунт', request=PasswordSerializer,
+        responses={
+            204: OpenApiResponse(description='Удалены аккаунт, профиль, сессии и избранное; жалобы остаются без связи'),
+            400: OpenApiResponse(description='{"password": ["Wrong password."]}'),
+            401: UNAUTHORIZED,
+            403: OpenApiResponse(description='Аккаунт администратора так не удалить'),
+            429: THROTTLED,
+        },
+    )
+    def delete(self, request):
+        try:
+            self.profile.delete_account(request.user, validated(PasswordSerializer, request)['password'])
+        except AdminAccountProtected:
+            raise PermissionDenied('Admin accounts cannot be deleted here.')
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class ChangeEmailView(APIView):

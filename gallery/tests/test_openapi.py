@@ -51,6 +51,7 @@ class OpenApiSchemaTest(SimpleTestCase):
                          {'type': 'http', 'scheme': 'bearer', 'bearerFormat': 'JWT'})
         self.assertEqual(self.responses('/auth/login', 'post'), {'200', '401', '403', '429'})
         self.assertEqual(self.responses('/me/password', 'post'), {'200', '400', '401', '429'})
+        self.assertEqual(self.responses('/me', 'delete'), {'204', '400', '401', '403', '429'})
         self.assertEqual(self.responses('/me/favorites/{photo_id}', 'put'), {'204', '401', '404'})
         login_body = self.schema['paths']['/auth/login']['post']['requestBody']['content']['application/json']
         self.assertEqual(login_body['schema']['$ref'], '#/components/schemas/Login')

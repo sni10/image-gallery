@@ -195,6 +195,12 @@ docker compose -f compose.prod.yaml logs caddy                 # сертифи�
 docker compose -f compose.prod.yaml exec app python manage.py createsuperuser   # первый администратор
 ```
 
+Очистка жалоб старше 3 лет (обещано в политике конфиденциальности) — cron пользователя `deploy` на сервере, раз в сутки (`crontab -e`):
+```
+17 4 * * * cd /srv/artai && docker compose -f compose.prod.yaml exec -T app python manage.py purge_old_complaints >> /srv/artai/purge.log 2>&1
+```
+Логи контейнеров ротируются сами (`logging` в `compose.prod.yaml`, 5 × 20 МБ на сервис, меньше 30 дней); у Caddy access-лог в файл не включён — если включать, то с `roll_keep_for 720h`.
+
 Фронт: `bash deploy/deploy.sh <полный sha фронта>` из репозитория `image-gallery-front` — записывает `FRONT_TAG` в `.env` и перезапускает только `front`. Откат — тот же скрипт с прошлым SHA.
 
 `manage.py check --deploy` на проде сейчас сообщает: консольная почта (до Brevo — ожидаемо), нет `SECURE_SSL_REDIRECT` (редирект делает Caddy — не нужно), нет HSTS (включить позже осознанно: `Strict-Transport-Security` в Caddy, начать с малого `max-age`).

@@ -170,6 +170,7 @@ FRONTEND_URL = ENV.frontend.url  # links in emails point to the SPA
 TERMS_VERSION = '2026-10-12'
 
 COMPLAINTS_EMAIL = ENV.complaints.email  # POST /complaints; empty -> stored in the admin only
+COMPLAINTS_RETENTION_DAYS = 1095  # promised in the privacy policy (3 years); manage.py purge_old_complaints, daily cron
 
 INGEST_API_KEY = ENV.ingest.api_key.get_secret_value()  # POST /ingest/photos; empty -> uploads off
 
@@ -205,7 +206,8 @@ REST_FRAMEWORK = {
     # Brute-force protection for auth endpoints (accounts.throttling.IPScopedRateThrottle, per IP and endpoint).
     # Counters live in CACHES below, shared by all gunicorn workers.
     'DEFAULT_THROTTLE_RATES': {
-        **{scope: '10/min' for scope in ('register', 'login', 'resend_confirmation', 'confirm_email', 'change_password')},
+        **{scope: '10/min' for scope in ('register', 'login', 'resend_confirmation', 'confirm_email', 'change_password',
+                                           'delete_account')},
         'complaint': '5/hour',
     },
     # The app runs behind exactly one proxy (Caddy): it sends one X-Forwarded-For value, the client IP

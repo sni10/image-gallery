@@ -64,5 +64,19 @@ class ProfileService:
         return self._token_pairs.issue(user)
 
 
+    def delete_account(self, user, password: str) -> None:
+        """Delete the user with profile, refresh tokens and favorites (cascade); complaints stay, unlinked.
+        Raises AdminAccountProtected for staff (don't lock the site out) or ValidationError."""
+        if user.is_staff or user.is_superuser:
+            raise AdminAccountProtected
+        if not user.check_password(password):
+            raise ValidationError({'password': ['Wrong password.']})
+        user.delete()
+
+
+class AdminAccountProtected(Exception):
+    pass
+
+
 def _email_taken(email: str, user) -> bool:
     return get_user_model().objects.filter(username=email).exclude(pk=user.pk).exists()

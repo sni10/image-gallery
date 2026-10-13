@@ -1,6 +1,12 @@
 # Production stack (server: /srv/artai). Values come from .env next to this file (see .env.production.example).
 # IMAGE_TAG / FRONT_TAG = backend / frontend commit SHA, written to .env by each repo's deploy/deploy.sh. Only caddy publishes ports: Docker opens
 # published ports past ufw, so db and app must never get a `ports:` section.
+# Docker logs hold IPs and User-Agents; the privacy policy keeps them at most 30 days. 5 x 20 MB per service covers
+# well under 30 days at current traffic; if traffic grows, shrink these rather than keep logs longer.
+x-logging: &logging
+  driver: local
+  options: { max-size: "20m", max-file: "5" }
+
 services:
   db:
     image: postgres:16-alpine
@@ -16,6 +22,7 @@ services:
       timeout: 5s
       retries: 10
     restart: unless-stopped
+    logging: *logging
 
   app:
     image: ghcr.io/sni10/image-gallery:${IMAGE_TAG:?set IMAGE_TAG to a commit SHA}
@@ -28,6 +35,7 @@ services:
       db:
         condition: service_healthy
     restart: unless-stopped
+    logging: *logging
 
   front:
     image: ghcr.io/sni10/image-gallery-front:${FRONT_TAG:?set FRONT_TAG to a frontend commit SHA}
@@ -35,6 +43,7 @@ services:
       # Server render calls the public API through Caddy (alias below), so image links come back as https://api.artai.win/...
       API_INTERNAL_URL: https://api.artai.win
     restart: unless-stopped
+    logging: *logging
 
   caddy:
     image: caddy:2.11
@@ -57,6 +66,7 @@ services:
       - app
       - front
     restart: unless-stopped
+    logging: *logging
 
 volumes:
   pgdata:
