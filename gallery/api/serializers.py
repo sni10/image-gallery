@@ -208,7 +208,7 @@ class CollectionWithCoverSerializer(CollectionSerializer):
 
     cover = PhotoSerializer(read_only=True, allow_null=True, help_text='Последнее добавленное фото; null, если пусто')
     hasPhoto = serializers.BooleanField(
-        source='has_photo', read_only=True, required=False,
+        source='has_photo', required=False,  # not read_only: OpenAPI marks read-only fields required
         help_text='Только при ?photo=<id>: есть ли это фото в коллекции',
     )
 

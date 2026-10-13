@@ -12,8 +12,9 @@ class FeedSortTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.user = User.objects.create_user('u@example.com', 'u@example.com', 'x')
-        cls.big = [photo(gallery('Big')) for _ in range(12)]  # oldest first; the 2 oldest are locked for guests
-        cls.small = [photo(gallery('Small')) for _ in range(3)]
+        big, small = gallery('Big'), gallery('Small')
+        cls.big = [photo(big) for _ in range(12)]  # oldest first; the 2 oldest are locked for guests
+        cls.small = [photo(small) for _ in range(3)]
         cls.all = cls.big + cls.small
         cls.guest_free = {p.public_id for p in cls.big[2:] + cls.small}
         fans = [User.objects.create_user(f'f{i}@example.com', f'f{i}@example.com', 'x') for i in range(3)]

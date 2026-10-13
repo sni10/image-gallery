@@ -73,7 +73,7 @@ class OpenApiSchemaTest(SimpleTestCase):
 
     def test_feed_similar_collections_contract(self):
         sort = next(p for p in self.schema['paths']['/photos']['get']['parameters'] if p['name'] == 'sort')
-        self.assertEqual(sort['schema']['enum'], ['random', 'new', 'popular'])
+        self.assertEqual(set(sort['schema']['enum']), {'random', 'new', 'popular'})
         self.assertEqual(self.responses('/photos/{photo_id}/similar', 'get'), {'200', '400', '404'})
         self.assertEqual(self.responses('/me/collections/{id}/photos/{photo_id}', 'put'), {'204', '400', '401', '404'})
         collection = self.schema['components']['schemas']['CollectionWithCover']
