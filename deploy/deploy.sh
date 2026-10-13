@@ -4,7 +4,7 @@
 # pulls the image and restarts the app; migrations run in the container entrypoint before gunicorn starts.
 set -euo pipefail
 
-SERVER=${DEPLOY_SERVER:-deploy@2.28.193.254}
+SERVER=${DEPLOY_SERVER:-deploy@198.98.52.9}
 DIR=${DEPLOY_DIR:-/srv/artai}
 SHA=${1:-}
 

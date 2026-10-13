@@ -1,10 +1,32 @@
+from django.conf import settings
 from rest_framework import serializers
+
+MUST_ACCEPT = 'You must accept the Terms of Use.'
+TERMS_CHANGED = 'The Terms of Use have changed, reload the page.'
 
 
 class RegisterSerializer(serializers.Serializer):
     email = serializers.CharField(max_length=254, help_text='Регистр и пробелы по краям не важны')
     password = serializers.CharField(write_only=True, trim_whitespace=False,
                                      help_text='Не короче 8 символов, не распространённый, не только цифры')
+    termsAccepted = serializers.BooleanField(
+        help_text='Согласие с Правилами использования (/terms), должно быть true',
+        error_messages={'required': MUST_ACCEPT, 'null': MUST_ACCEPT, 'invalid': MUST_ACCEPT},
+    )
+    termsVersion = serializers.CharField(
+        max_length=10, help_text='Редакция Правил, которую видел пользователь (YYYY-MM-DD); должна быть текущей',
+        error_messages={'required': TERMS_CHANGED, 'blank': TERMS_CHANGED, 'max_length': TERMS_CHANGED},
+    )
+
+    def validate_termsAccepted(self, value):
+        if not value:
+            raise serializers.ValidationError(MUST_ACCEPT)
+        return value
+
+    def validate_termsVersion(self, value):
+        if value != settings.TERMS_VERSION:
+            raise serializers.ValidationError(TERMS_CHANGED)
+        return value
 
 
 class RegisteredSerializer(serializers.Serializer):

@@ -48,10 +48,12 @@ class RegisterView(AuthThrottled):
 
     @extend_schema(
         summary='Регистрация', request=RegisterSerializer,
-        responses={429: THROTTLED, 201: RegisteredSerializer, 400: OpenApiResponse(description='Ошибки по полям email/password')},
+        responses={429: THROTTLED, 201: RegisteredSerializer,
+                   400: OpenApiResponse(description='Ошибки по полям email/password/termsAccepted/termsVersion')},
     )
     def post(self, request):
-        user = self.registration.register(**validated(RegisterSerializer, request))
+        data = validated(RegisterSerializer, request)  # terms are checked here, before the account and the email
+        user = self.registration.register(data['email'], data['password'], data['termsVersion'])
         return Response({'email': user.email}, status=status.HTTP_201_CREATED)
 
 

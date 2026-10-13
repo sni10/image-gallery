@@ -5,7 +5,7 @@
 Отмечай `[x]` по мере выполнения. «Я» — делаешь сам, «Claude» — скажи, и сделаю.
 
 **Сейчас**
-- [x] **Я:** создать администратора — `ssh deploy@2.28.193.254`, затем `cd /srv/artai && docker compose -f compose.prod.yaml exec app python manage.py createsuperuser`; войти на https://secure.artai.win/admin/
+- [x] **Я:** создать администратора — `ssh deploy@198.98.52.9`, затем `cd /srv/artai && docker compose -f compose.prod.yaml exec app python manage.py createsuperuser`; войти на https://secure.artai.win/admin/
 - [x] **Я:** создать категории и галереи, залить фото (через админку на `secure.artai.win`)
 - [x] **Я:** закоммитить и запушить английский язык (бэкенд вышел v0.2.1, фронт — первый релиз v0.1.0)
 - [x] **Claude:** выкачены бэкенд `eed0408` (v0.2.1 + тест) и фронт `2591854` (v0.1.0); проверено: сайт по умолчанию en даже для русского браузера, ru — по cookie, ошибки API и письма на английском — 09.10.2026
@@ -47,7 +47,7 @@
 
 **Надёжность**
 - [ ] **Отложено (нет бюджета на место):** хранилище для бэкапов (Hetzner Object Storage / Backblaze B2) и ключи на сервер — делать последним, но до того, как контент станет невосстановимым
-- [ ] **Claude:** ежедневный `pg_dump` + копия тома `media`, ротация, проверка восстановления — после выбора хранилища
+- [x] **Claude:** `deploy/backup.sh` — полный бэкап на домашний ПК, **Я:** запускать раз в неделю (12.10.2026); см. «Бэкапы»
 
 **Скрыть IP сервера** (отложено, делать вместе с бэкапами; пока `secure.artai.win` — без прокси, IP виден)
 IP `2.28.193.254` уже утёк: до 09.10.2026 все записи указывали прямо на него, сервисы истории DNS это помнят.
@@ -67,13 +67,15 @@ IP `2.28.193.254` уже утёк: до 09.10.2026 все записи указ�
 
 | | |
 |---|---|
-| Хостинг | Hetzner Cloud, **CPX22** (2 vCPU AMD, 4 ГБ RAM, 80 ГБ SSD, 20 ТБ трафика), Nuremberg, 19.49 €/мес + IPv4 |
-| Имя | `ubuntu-4gb-nbg1-1` (#169490394) |
-| IPv4 / IPv6 | `2.28.193.254` / `2a01:4f8:c0c:ae3c::/64` |
-| Вход | `ssh deploy@2.28.193.254` — только по ключу `~/.ssh/id_ed25519` с домашнего ПК |
-| Система | Ubuntu 26.04.1 LTS |
+| Хостинг | BuyVM (buyvm.net), 1 vCPU, 4 ГБ RAM, 80 ГБ диск; панель manage.buyvm.net |
+| Имя | `SLICE-202909` |
+| IPv4 / IPv6 | `198.98.52.9` / — (IPv6 не настроен) |
+| Вход | `ssh deploy@198.98.52.9` — только по ключу `~/.ssh/id_ed25519` с домашнего ПК; пароль `deploy` (sudo, VNC-консоль BuyVM) — в `server-credentials.txt` (gitignored) |
+| Система | Ubuntu 24.04.2 LTS (переустановлена 12.10.2026) |
 
-Настроено (09.10.2026):
+С 10.10.2026 переезд Hetzner → BuyVM: старый сервер удалён, бэкап — `C:\backups\artai\2026-10-10`. Список ниже — как было настроено на Hetzner; на BuyVM повторить.
+
+Настроено на Hetzner (09.10.2026):
 - система обновлена, ежедневная автоустановка обновлений безопасности (`unattended-upgrades`);
 - пользователь `deploy`: `sudo` без пароля (пароля у пользователя нет), группа `docker`;
 - SSH: вход по паролю запрещён, вход под `root` запрещён (`/etc/ssh/sshd_config.d/00-hardening.conf`);
@@ -91,13 +93,12 @@ IP `2.28.193.254` уже утёк: до 09.10.2026 все записи указ�
 
 | Type | Name | Content | Proxy |
 |---|---|---|---|
-| A | `@` | `2.28.193.254` | **Proxied** |
-| AAAA | `@` | `2a01:4f8:c0c:ae3c::1` | **Proxied** |
+| A | `@` | `198.98.52.9` | **Proxied** |
 | CNAME | `www` | `artai.win` | **Proxied** |
-| A | `api` | `2.28.193.254` | **Proxied** |
-| AAAA | `api` | `2a01:4f8:c0c:ae3c::1` | **Proxied** |
-| A | `secure` | `2.28.193.254` | DNS only (всегда) |
-| AAAA | `secure` | `2a01:4f8:c0c:ae3c::1` | DNS only (всегда) |
+| A | `api` | `198.98.52.9` | **Proxied** |
+| A | `secure` | `198.98.52.9` | DNS only (всегда) |
+
+⚠ Переезд на BuyVM: в Cloudflare поменять A-записи на `198.98.52.9` и **удалить** старые AAAA (`2a01:4f8:c0c:ae3c::1`) — после восстановления сайта на новом сервере.
 | TXT | `@` | `brevo-code:…` (подтверждение домена в Brevo) | — |
 | CNAME | `brevo1._domainkey`, `brevo2._domainkey` | `b1`/`b2.artai-win.dkim.brevo.com` (DKIM) | DNS only |
 | TXT | `_dmarc` | `v=DMARC1; p=none; rua=mailto:rua@dmarc.brevo.com` | — |
@@ -129,7 +130,7 @@ IP `2.28.193.254` уже утёк: до 09.10.2026 все записи указ�
 
 1. ✅ **VPS** — Hetzner CPX22, см. «Сервер».
 2. ✅ **Домен** — `artai.win`, см. «Домен и DNS».
-3. ✅ **SSH** — `ssh deploy@2.28.193.254`.
+3. ✅ **SSH** — `ssh deploy@198.98.52.9`.
 4. ✅ **GitHub** — Actions работают; на сервере `docker login ghcr.io` (токен classic, `read:packages`; обновить до истечения срока).
 5. ✅ **Почта (Brevo)** — домен `artai.win` подтверждён, отправитель `ArtAI <noreply@artai.win>`, SMTP-ключ в `.env` на сервере.
 6. ✅ **Фронт** — собирается в CI с `VITE_API_URL=https://api.artai.win`.
@@ -186,7 +187,7 @@ bash deploy/deploy.sh <полный sha>      # с домашнего ПК: ко
 Откат — та же команда с предыдущим SHA. Миграции сами не откатываются: если новая версия добавила миграцию, несовместимую со старым кодом, сначала
 `docker compose -f compose.prod.yaml exec app python manage.py migrate <app> <предыдущая миграция>`, потом деплой старого SHA.
 
-На сервере (`ssh deploy@2.28.193.254`, `cd /srv/artai`):
+На сервере (`ssh deploy@198.98.52.9`, `cd /srv/artai`):
 ```bash
 docker compose -f compose.prod.yaml ps                         # что запущено и какой образ
 docker compose -f compose.prod.yaml logs -f app                # логи приложения (сюда же пишутся письма до Brevo)
@@ -200,10 +201,25 @@ docker compose -f compose.prod.yaml exec app python manage.py createsuperuser   
 
 ## Бэкапы
 
-**Сделать при запуске продакшена**, до того как в нём появится реальный контент:
-- ежедневный `pg_dump` базы во внешнее хранилище (S3 / Backblaze B2 / другой сервер) с ротацией;
-- копия тома `media` (оригиналы — главная ценность; превью можно пересоздать командой `rebuild_thumbs`);
-- регулярная проверка восстановления из бэкапа.
+**Раз в неделю, вручную с домашнего ПК** (решено 12.10.2026; внешнего хранилища нет):
+
+```
+bash deploy/backup.sh            # → C:\backups\artai\<YYYY-MM-DD>\
+```
+
+Скрипт тянет по ssh, ничего не складывая на сервере: `artai.dump` (`pg_dump -Fc`), `media.tar`, `originals.tar` (тома целиком), `.env`, `compose.prod.yaml`, `Caddyfile`. В конце сверяет число файлов в архивах с томами на сервере. Оригиналы (`originals`) — главная ценность. Старые папки удалять вручную, оставлять 2–3 последних.
+
+**Восстановление** (проверено 12.10.2026 при переезде на BuyVM, бэкап `2026-10-10`): положить `.env`, `compose.prod.yaml`, `Caddyfile` в `/srv/artai`, архивы — в `/srv/artai/restore`, затем на сервере:
+
+```
+cd /srv/artai && docker compose -f compose.prod.yaml pull && docker compose -f compose.prod.yaml create
+docker compose -f compose.prod.yaml up -d db
+docker compose -f compose.prod.yaml exec -T db sh -c 'pg_restore --no-owner -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < restore/artai.dump
+for v in media originals; do docker run --rm -v artai_$v:/dst -v /srv/artai/restore:/src:ro alpine tar -xpf /src/$v.tar -C /dst --numeric-owner; done
+docker compose -f compose.prod.yaml up -d
+```
+
+Нужен `docker login ghcr.io` (токен classic с `read:packages`; токен без него логинится, но `pull` пишет `denied`).
 
 ## Чеклист
 

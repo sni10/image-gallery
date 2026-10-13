@@ -23,6 +23,9 @@ class Profile(PublicIdModel):
     """The user's public id (auth.User can't get fields of its own). Created automatically with the user."""
 
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='profile')
+    terms_version = models.CharField('Редакция Правил', max_length=10, blank=True,
+                                     help_text='Пусто — регистрировался до появления Правил')
+    terms_accepted_at = models.DateTimeField('Правила приняты', null=True, blank=True)
 
     def __str__(self):
         return str(self.user)

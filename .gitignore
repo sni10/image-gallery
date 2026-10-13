@@ -11,3 +11,5 @@ reports/
 htmlcov/
 
 .claude/settings.local.json
+
+server-credentials.txt

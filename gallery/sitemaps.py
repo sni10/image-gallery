@@ -19,7 +19,7 @@ class FrontendSitemap(Sitemap):
 
 class PageSitemap(FrontendSitemap):
     def items(self):
-        return ['/', '/galleries']
+        return ['/', '/galleries', '/terms']
 
     def location(self, item):
         return item

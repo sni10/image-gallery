@@ -182,3 +182,10 @@ class IngestGallerySerializer(serializers.ModelSerializer):
 class PhotoIngestResultSerializer(serializers.Serializer):
     photo = PhotoSerializer()
     gallery = IngestGallerySerializer(source='photo.gallery')
+
+
+class ComplaintSerializer(serializers.Serializer):
+    email = serializers.EmailField(max_length=254, help_text='Куда ответить')
+    photoUrl = serializers.URLField(max_length=500, required=False, allow_blank=True, default='',
+                                    help_text='Ссылка на фото, необязательно')
+    message = serializers.CharField(min_length=10, max_length=5000, help_text='10–5000 символов')

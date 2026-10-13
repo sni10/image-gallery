@@ -2,13 +2,13 @@ from io import StringIO
 
 import yaml
 from django.core.management import call_command
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 
 PATHS = {
     '/photos', '/photos/{photo_id}', '/categories', '/galleries', '/galleries/{id}', '/galleries/{id}/photos',
     '/auth/register', '/auth/confirm-email', '/auth/resend-confirmation', '/auth/login', '/auth/refresh',
     '/auth/logout', '/auth/confirm-email-change', '/me', '/me/email', '/me/password',
-    '/me/favorites', '/me/favorites/{photo_id}', '/ingest/photos',
+    '/me/favorites', '/me/favorites/{photo_id}', '/ingest/photos', '/complaints',
 }
 
 
@@ -55,6 +55,19 @@ class OpenApiSchemaTest(SimpleTestCase):
         login_body = self.schema['paths']['/auth/login']['post']['requestBody']['content']['application/json']
         self.assertEqual(login_body['schema']['$ref'], '#/components/schemas/Login')
         self.assertEqual(set(self.schema['components']['schemas']['TokenPair']['required']), {'access', 'refresh'})
+
+    def test_register_contract(self):
+        register = self.schema['components']['schemas']['Register']
+        self.assertEqual(set(register['required']), {'email', 'password', 'termsAccepted', 'termsVersion'})
+        self.assertEqual(register['properties']['termsAccepted']['type'], 'boolean')
+
+    @override_settings(COMPLAINTS_EMAIL='secret-admin@example.com')
+    def test_complaints_contract(self):
+        self.assertEqual(self.responses('/complaints', 'post'), {'204', '400', '429'})
+        self.assertEqual(set(self.schema['components']['schemas']['Complaint']['required']), {'email', 'message'})
+        out = StringIO()
+        call_command('spectacular', stdout=out)
+        self.assertNotIn('secret-admin', out.getvalue())
 
     def test_ingest_contract(self):
         ingest = self.schema['paths']['/ingest/photos']['post']

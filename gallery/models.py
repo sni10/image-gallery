@@ -79,3 +79,23 @@ class Favorite(models.Model):
     class Meta:
         constraints = [models.UniqueConstraint(fields=['user', 'photo'], name='unique_favorite_per_user')]
         indexes = [models.Index(fields=['user', '-created_at'], name='favorite_user_recent')]
+
+
+class Complaint(models.Model):
+    """A complaint about content from the /complaint form. Kept even if the email to the admin was not sent."""
+
+    email = models.EmailField(help_text='Сюда отвечать')
+    photo_url = models.CharField(max_length=500, blank=True)
+    message = models.TextField()
+    ip = models.CharField(max_length=64, blank=True)
+    user_agent = models.CharField(max_length=500, blank=True)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                             related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+    handled = models.BooleanField('Обработана', default=False)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.email}: {self.photo_url or "без ссылки"}'

@@ -1,5 +1,7 @@
 from django.urls import path
 
+from .complaints import ComplaintView
+
 from .views import (
     CategoryListView, FavoriteListView, FavoriteView, GalleryDetailView, GalleryListView, GalleryPhotoListView,
     PhotoDetailView, PhotoIngestView, RandomPhotoListView,
@@ -15,4 +17,5 @@ urlpatterns = [
     path('me/favorites', FavoriteListView.as_view(), name='favorite-list'),
     path('me/favorites/<str:photo_id>', FavoriteView.as_view(), name='favorite'),
     path('ingest/photos', PhotoIngestView.as_view(), name='photo-ingest'),
+    path('complaints', ComplaintView.as_view(), name='complaints'),
 ]
