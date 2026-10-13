@@ -214,3 +214,17 @@ class CollectionWithCoverSerializer(CollectionSerializer):
 
     class Meta(CollectionSerializer.Meta):
         fields = [*CollectionSerializer.Meta.fields, 'cover', 'hasPhoto']
+
+
+class FeedFiltersSerializer(serializers.Serializer):
+    """Query params of GET /photos that narrow the feed."""
+
+    tag = serializers.CharField(required=False, help_text='Только фото с этим тегом. Регистр, # и пробелы по краям не важны')
+    q = serializers.CharField(required=False, min_length=2, max_length=100,
+                              help_text='Поиск: часть тега, описания, названия фото, галереи или категории; 2–100 символов')
+
+    def validate_tag(self, value):
+        tag = value.lstrip('#').strip().lower()
+        if not tag or len(tag) > MAX_TAG_LENGTH:
+            raise serializers.ValidationError(f'Must be 1-{MAX_TAG_LENGTH} characters.')
+        return tag

@@ -1,7 +1,9 @@
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
+from django.contrib.postgres.indexes import GinIndex, OpClass
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models.functions import Upper
 
 from common.models import PublicIdModel
 
@@ -54,8 +56,11 @@ class Photo(PublicIdModel):
     gallery = models.ForeignKey(Gallery, on_delete=models.CASCADE, related_name='photos')
     title = models.CharField(max_length=200, blank=True, help_text='Если пусто — имя файла')
     description = models.TextField(blank=True, default='')
-    # ponytail: a Tag model + GIN index once there are tag pages / tag search; tags__contains=['cat'] works now
+    # ponytail: no Tag model; tag pages use a GIN index on the array, the sitemap unnest()s it. A Tag model if
+    # tags ever need their own data (titles, descriptions)
     tags = ArrayField(models.CharField(max_length=50), default=list, blank=True, help_text='Нижний регистр, без #')
+    # Tags joined by spaces, kept by save(): search needs a trigram index, which can't cover an array
+    tags_text = models.TextField(blank=True, default='', editable=False)
     image = models.ImageField(upload_to='original/', help_text='Оригинал без метаданных (EXIF, XMP, текст PNG)')
     thumb = models.ImageField(upload_to='thumb/', blank=True, editable=False)
     width = models.PositiveIntegerField(default=0, editable=False)
@@ -64,6 +69,17 @@ class Photo(PublicIdModel):
 
     class Meta:
         ordering = ['-id']
+        indexes = [
+            GinIndex(fields=['tags'], name='photo_tags'),  # tags__contains: tag pages
+            *(GinIndex(OpClass(Upper(f), name='gin_trgm_ops'), name=f'photo_{f}_trgm')  # icontains = UPPER LIKE
+              for f in ('tags_text', 'description', 'title')),
+        ]
+
+    def save(self, *args, **kwargs):
+        self.tags_text = ' '.join(self.tags)
+        if (fields := kwargs.get('update_fields')) is not None and 'tags' in fields:
+            kwargs['update_fields'] = {*fields, 'tags_text'}
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.title

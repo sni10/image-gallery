@@ -20,8 +20,8 @@ from ..services.signed_media import is_valid
 from .pagination import PageLimitPagination
 from .permissions import HasIngestKey
 from .serializers import (
-    CategoryWithCountSerializer, GallerySerializer, PhotoDetailSerializer, PhotoIngestResultSerializer,
-    PhotoIngestSerializer, PhotoSerializer,
+    CategoryWithCountSerializer, FeedFiltersSerializer, GallerySerializer, PhotoDetailSerializer,
+    PhotoIngestResultSerializer, PhotoIngestSerializer, PhotoSerializer,
 )
 
 SEED_RE = re.compile(r'^[A-Za-z0-9]{1,32}$')
@@ -97,15 +97,19 @@ class GalleryDetailView(RetrieveAPIView):
             description='Обязателен при sort=random, иначе игнорируется. Ключ случайного порядка: 1–32 латинских '
                         'буквы или цифры. Сгенерируйте при заходе на страницу и передавайте во всех запросах подгрузки.',
         ),
+        FeedFiltersSerializer,
     ],
     responses={200: PhotoSerializer(many=True),
-               400: OpenApiResponse(description='Неизвестный sort, нет seed при random или неверный page/limit/seed')},
+               400: OpenApiResponse(description='Неизвестный sort, нет seed при random, неверный page/limit/seed/tag/q, '
+                                                'например {"q": ["Ensure this field has at least 2 characters."]}')},
 )
 class RandomPhotoListView(ListAPIView):
     serializer_class = PhotoSerializer
     pagination_class = PageLimitPagination
 
     def get_queryset(self):
+        filters = FeedFiltersSerializer(data=self.request.query_params.dict())  # a QueryDict treats tag= as absent
+        filters.is_valid(raise_exception=True)
         sort = self.request.query_params.get('sort', 'random')
         if sort not in FEED_SORTS:
             raise ValidationError({'sort': [f'must be one of: {", ".join(FEED_SORTS)}']})
@@ -116,6 +120,10 @@ class RandomPhotoListView(ListAPIView):
             photos = PhotoQueries.shuffled(seed)
         else:
             photos = FEED_SORTS[sort]()
+        if 'tag' in filters.validated_data:
+            photos = photos.filter(tags__contains=[filters.validated_data['tag']])
+        if 'q' in filters.validated_data:
+            photos = PhotoQueries.search(photos, filters.validated_data['q'])
         user = self.request.user
         if user.is_authenticated:
             return PhotoQueries.for_user(photos, user)

@@ -1,6 +1,6 @@
 from django.conf import settings
 from django.db.models import (
-    BooleanField, Case, CharField, Count, Exists, IntegerField, OuterRef, QuerySet, Subquery, Value, When,
+    BooleanField, Case, CharField, Count, Exists, IntegerField, OuterRef, Q, QuerySet, Subquery, Value, When,
 )
 from django.db.models.expressions import RawSQL
 from django.db.models.functions import MD5, Cast, Concat
@@ -58,6 +58,14 @@ class PhotoQueries:
         """Most favorited first. The count orders only, it is never exposed.
         ponytail: Count over all favorites per request; denormalize Photo.favorites_count if it gets slow."""
         return Photo.objects.annotate(favorites_n=Count('favorited_by')).order_by('-favorites_n', '-pk')
+
+    @staticmethod
+    def search(photos: QuerySet[Photo], q: str) -> QuerySet[Photo]:
+        """Case-insensitive substring in a tag, the description, the title, the gallery or category title.
+        Photo columns have trigram indexes; gallery and category tables are small.
+        ponytail: plain "contains"; TrigramWordSimilarity with a threshold and ranking if that proves too little."""
+        return photos.filter(Q(tags_text__icontains=q) | Q(description__icontains=q) | Q(title__icontains=q)
+                             | Q(gallery__title__icontains=q) | Q(gallery__category__title__icontains=q))
 
     @staticmethod
     def guest_feed(feed: QuerySet[Photo]) -> QuerySet[Photo]:
