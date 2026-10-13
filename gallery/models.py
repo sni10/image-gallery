@@ -99,3 +99,30 @@ class Complaint(models.Model):
 
     def __str__(self):
         return f'{self.email}: {self.photo_url or "без ссылки"}'
+
+
+class Collection(PublicIdModel):
+    """A user's private folder of photos (like a board). Separate from favorites."""
+
+    MAX_PER_USER = 100
+    MAX_PHOTOS = 1000
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='collections')
+    title = models.CharField(max_length=100)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True, help_text='Также при добавлении и удалении фото')
+
+    class Meta:
+        indexes = [models.Index(fields=['user', '-updated_at'], name='collection_user_recent')]
+
+    def __str__(self):
+        return self.title
+
+
+class CollectionPhoto(models.Model):
+    collection = models.ForeignKey(Collection, on_delete=models.CASCADE, related_name='links')
+    photo = models.ForeignKey(Photo, on_delete=models.CASCADE, related_name='collection_links')
+    added_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['collection', 'photo'], name='unique_photo_per_collection')]

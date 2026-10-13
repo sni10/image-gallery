@@ -4,12 +4,13 @@ from .complaints import ComplaintView
 
 from .views import (
     CategoryListView, FavoriteListView, FavoriteView, GalleryDetailView, GalleryListView, GalleryPhotoListView,
-    PhotoDetailView, PhotoIngestView, RandomPhotoListView,
+    PhotoDetailView, PhotoIngestView, RandomPhotoListView, SimilarPhotoListView,
 )
 
 urlpatterns = [
     path('photos', RandomPhotoListView.as_view(), name='photo-list'),
     path('photos/<str:photo_id>', PhotoDetailView.as_view(), name='photo-detail'),
+    path('photos/<str:photo_id>/similar', SimilarPhotoListView.as_view(), name='photo-similar'),
     path('categories', CategoryListView.as_view(), name='category-list'),
     path('galleries', GalleryListView.as_view(), name='gallery-list'),
     path('galleries/<str:id>', GalleryDetailView.as_view(), name='gallery-detail'),

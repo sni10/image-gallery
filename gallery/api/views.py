@@ -5,7 +5,7 @@ from django.conf import settings
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from PIL import UnidentifiedImageError
-from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
+from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema, inline_serializer
 from rest_framework import status
 from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.generics import ListAPIView, RetrieveAPIView
@@ -25,6 +25,8 @@ from .serializers import (
 )
 
 SEED_RE = re.compile(r'^[A-Za-z0-9]{1,32}$')
+FEED_SORTS = {'random': None, 'new': PhotoQueries.newest, 'popular': PhotoQueries.popular}  # random needs the seed
+SIMILAR_LIMIT, SIMILAR_MAX = 12, 24
 
 BAD_PARAMS = OpenApiResponse(description='page или limit не целое число или меньше 1, например {"page": "must be >= 1"}')
 NOT_FOUND = OpenApiResponse(description='Галереи с таким id нет (в том числе старый id после перевыпуска ссылки)')
@@ -81,27 +83,40 @@ class GalleryDetailView(RetrieveAPIView):
 
 
 @extend_schema(
-    summary='Фото всех галерей в случайном порядке',
-    description='Для главной. Порядок задаёт seed: с одним seed все страницы идут в одном порядке, '
-                'фото не повторяются и не пропадают. Новый seed — новый порядок. '
+    summary='Лента главной: фото всех галерей',
+    description='Порядок — sort. random: порядок задаёт seed, с одним seed все страницы идут в одном порядке, '
+                'фото не повторяются и не пропадают; новый seed — новый порядок. new: сначала новые. '
+                'popular: сначала чаще добавляемые в избранное (само число не отдаётся). '
                 'Гость: открыты первые 10 позиций ленты, и только из фото, открытых в своих галереях '
-                '(они идут первыми); остальные locked.',
-    parameters=[OpenApiParameter(
-        'seed', str, required=True, pattern=SEED_RE.pattern,
-        description='Ключ случайного порядка: 1–32 латинских буквы или цифры. Сгенерируйте при заходе на страницу '
-                    'и передавайте во всех запросах подгрузки.',
-    )],
-    responses={200: PhotoSerializer(many=True), 400: OpenApiResponse(description='Нет seed или неверный page/limit/seed')},
+                '(они идут первыми, в порядке sort); остальные locked.',
+    parameters=[
+        OpenApiParameter('sort', str, required=False, enum=list(FEED_SORTS), default='random',
+                         description='Порядок ленты'),
+        OpenApiParameter(
+            'seed', str, required=False, pattern=SEED_RE.pattern,
+            description='Обязателен при sort=random, иначе игнорируется. Ключ случайного порядка: 1–32 латинских '
+                        'буквы или цифры. Сгенерируйте при заходе на страницу и передавайте во всех запросах подгрузки.',
+        ),
+    ],
+    responses={200: PhotoSerializer(many=True),
+               400: OpenApiResponse(description='Неизвестный sort, нет seed при random или неверный page/limit/seed')},
 )
 class RandomPhotoListView(ListAPIView):
     serializer_class = PhotoSerializer
     pagination_class = PageLimitPagination
 
     def get_queryset(self):
-        seed = self.request.query_params.get('seed', '')
-        if not SEED_RE.fullmatch(seed):
-            raise ValidationError({'seed': 'required, 1-32 latin letters or digits'})
-        user, photos = self.request.user, PhotoQueries.shuffled(seed)
+        sort = self.request.query_params.get('sort', 'random')
+        if sort not in FEED_SORTS:
+            raise ValidationError({'sort': [f'must be one of: {", ".join(FEED_SORTS)}']})
+        if sort == 'random':
+            seed = self.request.query_params.get('seed', '')
+            if not SEED_RE.fullmatch(seed):
+                raise ValidationError({'seed': 'required, 1-32 latin letters or digits'})
+            photos = PhotoQueries.shuffled(seed)
+        else:
+            photos = FEED_SORTS[sort]()
+        user = self.request.user
         if user.is_authenticated:
             return PhotoQueries.for_user(photos, user)
         return PhotoQueries.with_is_favorite(PhotoQueries.guest_feed(photos), user)
@@ -210,6 +225,31 @@ class PhotoDetailView(RetrieveAPIView):
         if not PhotoService.delete(Photo.objects.filter(public_id=photo_id)):
             raise NotFound('Photo not found.')
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@extend_schema(
+    summary='Похожие фото',
+    description='Для блока «похожие» на странице фото. Без пагинации. Порядок и подбор — забота сервера '
+                '(сейчас по общим тегам, потом добавится цвет); само фото в список не входит.',
+    parameters=[PHOTO_ID, OpenApiParameter('limit', int, required=False, default=SIMILAR_LIMIT,
+                                           description=f'Сколько фото, 1–{SIMILAR_MAX}')],
+    responses={
+        200: inline_serializer('SimilarPhotos', {'items': PhotoSerializer(many=True)}),
+        400: OpenApiResponse(description='limit не целое число от 1 до 24'),
+        404: OpenApiResponse(description='Фото с таким id нет'),
+    },
+)
+class SimilarPhotoListView(APIView):
+    def get(self, request, photo_id):
+        try:
+            limit = int(request.query_params.get('limit', SIMILAR_LIMIT))
+        except ValueError:
+            limit = 0
+        if not 1 <= limit <= SIMILAR_MAX:
+            raise ValidationError({'limit': [f'must be an integer from 1 to {SIMILAR_MAX}']})
+        photo = get_object_or_404(Photo.objects.select_related('gallery'), public_id=photo_id)
+        photos = PhotoQueries.for_user(PhotoQueries.similar(photo), request.user)[:limit]
+        return Response({'items': PhotoSerializer(photos, many=True, context={'request': request}).data})
 
 
 @extend_schema(

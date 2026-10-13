@@ -5,7 +5,7 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from ..models import Category, Gallery, Photo
+from ..models import Category, Collection, Gallery, Photo
 from ..services import PhotoQueries
 from ..services.signed_media import signed_query
 
@@ -189,3 +189,28 @@ class ComplaintSerializer(serializers.Serializer):
     photoUrl = serializers.URLField(max_length=500, required=False, allow_blank=True, default='',
                                     help_text='Ссылка на фото, необязательно')
     message = serializers.CharField(min_length=10, max_length=5000, help_text='10–5000 символов')
+
+
+class CollectionSerializer(serializers.ModelSerializer):
+    """Expects collections from CollectionQueries.of_user()."""
+
+    id = serializers.CharField(source='public_id', read_only=True, help_text='Публичный id: 26 символов [a-z2-7], не число')
+    title = serializers.CharField(max_length=100, help_text='1–100 символов, пробелы по краям обрезаются')
+    photosCount = serializers.IntegerField(source='photos_count', read_only=True, help_text='Сколько фото в коллекции')
+
+    class Meta:
+        model = Collection
+        fields = ['id', 'title', 'photosCount']
+
+
+class CollectionWithCoverSerializer(CollectionSerializer):
+    """Expects covers from CollectionQueries.attach_covers()."""
+
+    cover = PhotoSerializer(read_only=True, allow_null=True, help_text='Последнее добавленное фото; null, если пусто')
+    hasPhoto = serializers.BooleanField(
+        source='has_photo', read_only=True, required=False,
+        help_text='Только при ?photo=<id>: есть ли это фото в коллекции',
+    )
+
+    class Meta(CollectionSerializer.Meta):
+        fields = [*CollectionSerializer.Meta.fields, 'cover', 'hasPhoto']
