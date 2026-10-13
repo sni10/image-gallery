@@ -1,5 +1,9 @@
 from django.conf import settings
-from django.db.models import BooleanField, CharField, Exists, OuterRef, QuerySet, Subquery, Value
+from django.db import connection
+from django.db.models import (
+    BooleanField, Case, CharField, Count, Exists, IntegerField, OuterRef, Q, QuerySet, Subquery, Value, When,
+)
+from django.db.models.expressions import RawSQL
 from django.db.models.functions import MD5, Cast, Concat
 
 from ..models import Favorite, Photo
@@ -47,11 +51,53 @@ class PhotoQueries:
         return PhotoQueries.with_locked(PhotoQueries.with_is_favorite(photos, user), user)
 
     @staticmethod
-    def guest_feed(shuffled: QuerySet[Photo]) -> QuerySet[Photo]:
-        """The home feed for a guest: photos open in their galleries first (still in seed order), then the rest.
-        Annotates `guest_free`; the view opens only the first GUEST_FREE_PHOTOS positions, so any seed shows
-        originals a guest can see in the galleries anyway: trying seeds never reveals new ones."""
-        return shuffled.annotate(guest_free=~_beyond_guest_free()).order_by('-guest_free', 'shuffle_key', 'pk')
+    def newest() -> QuerySet[Photo]:
+        return Photo.objects.order_by('-created_at', '-pk')
+
+    @staticmethod
+    def popular() -> QuerySet[Photo]:
+        """Most favorited first. The count orders only, it is never exposed.
+        ponytail: Count over all favorites per request; denormalize Photo.favorites_count if it gets slow."""
+        return Photo.objects.annotate(favorites_n=Count('favorited_by')).order_by('-favorites_n', '-pk')
+
+    @staticmethod
+    def tag_counts(limit: int, related: str | None = None) -> list[tuple[str, int]]:
+        """Most used tags with their photo counts, or, for `related`, the tags most often on the same photos
+        (count = shared photos; `related` itself is left out). Ties by name.
+        ponytail: walks all photos (the GIN index narrows `related`); cache for a minute if it gets slow."""
+        where, params = ('WHERE tags @> ARRAY[%s]::varchar[] AND t <> %s', [related, related]) if related else ('', [])
+        with connection.cursor() as cursor:
+            cursor.execute(f'SELECT t, count(*) FROM {Photo._meta.db_table}, unnest(tags) t {where} '
+                           'GROUP BY t ORDER BY 2 DESC, 1 LIMIT %s', [*params, limit])
+            return cursor.fetchall()
+
+    @staticmethod
+    def search(photos: QuerySet[Photo], q: str) -> QuerySet[Photo]:
+        """Case-insensitive substring in a tag, the description, the title, the gallery or category title.
+        Photo columns have trigram indexes; gallery and category tables are small.
+        ponytail: plain "contains"; TrigramWordSimilarity with a threshold and ranking if that proves too little."""
+        return photos.filter(Q(tags_text__icontains=q) | Q(description__icontains=q) | Q(title__icontains=q)
+                             | Q(gallery__title__icontains=q) | Q(gallery__category__title__icontains=q))
+
+    @staticmethod
+    def guest_feed(feed: QuerySet[Photo]) -> QuerySet[Photo]:
+        """The home feed for a guest: photos open in their galleries first (still in the feed's order), then the
+        rest. Annotates `guest_free`; the view opens only the first GUEST_FREE_PHOTOS positions, so any seed or sort
+        shows originals a guest can see in the galleries anyway: trying them never reveals new ones."""
+        return feed.annotate(guest_free=~_beyond_guest_free()).order_by('-guest_free', *feed.query.order_by)
+
+    @staticmethod
+    def similar(photo: Photo) -> QuerySet[Photo]:
+        """Photos sharing the most tags with `photo`, other galleries first among equals (its own gallery is a
+        click away). Then the rest: same category first, then any, newest first (fills up a short list).
+        ponytail: tag intersection over every row, no index; a GIN index on tags when the catalog gets large."""
+        shared = RawSQL(f'cardinality(ARRAY(SELECT unnest({Photo._meta.db_table}.tags) '
+                        'INTERSECT SELECT unnest(%s::varchar[])))', (photo.tags,), output_field=IntegerField())
+        other_gallery = Case(When(gallery_id=photo.gallery_id, then=0), default=1)
+        filler_same_category = Case(When(shared=0, gallery__category_id=photo.gallery.category_id, then=1), default=0)
+        return (Photo.objects.exclude(pk=photo.pk)
+                .annotate(shared=shared, other_gallery=other_gallery, filler_same_category=filler_same_category)
+                .order_by('-shared', '-filler_same_category', '-other_gallery', '-pk'))
 
     @staticmethod
     def with_is_favorite(photos: QuerySet[Photo], user) -> QuerySet[Photo]:

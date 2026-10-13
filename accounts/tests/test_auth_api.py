@@ -2,11 +2,14 @@ from django.contrib.auth.models import User
 from django.core import mail
 from django.core.cache import cache
 from django.test import TestCase, override_settings
+from django.utils import timezone
 
 from .test_registration import STRONG, link_token
 
+TERMS = {'termsAccepted': True, 'termsVersion': '2026-10-12'}
 
-@override_settings(FRONTEND_URL='https://gallery.test')
+
+@override_settings(FRONTEND_URL='https://gallery.test', TERMS_VERSION='2026-10-12')
 class ApiTestCase(TestCase):
     def setUp(self):
         cache.clear()  # throttle counters live in the cache and would leak between tests
@@ -17,18 +20,38 @@ class ApiTestCase(TestCase):
 
 class RegistrationApiTest(ApiTestCase):
     def test_register(self):
-        r = self.post('/auth/register', email=' Anna@Example.com ', password=STRONG)
+        r = self.post('/auth/register', email=' Anna@Example.com ', password=STRONG, **TERMS)
         self.assertEqual((r.status_code, r.json()), (201, {'email': 'anna@example.com'}))
-        self.assertFalse(User.objects.get().is_active)
+        user = User.objects.get()
+        self.assertFalse(user.is_active)
         self.assertEqual(mail.outbox[0].to, ['anna@example.com'])
+        self.assertEqual(user.profile.terms_version, '2026-10-12')
+        self.assertAlmostEqual(user.profile.terms_accepted_at, timezone.now(), delta=timezone.timedelta(minutes=1))
+
+    def test_register_requires_current_terms(self):
+        cases = [
+            ({}, 'termsAccepted', 'You must accept the Terms of Use.'),
+            ({'termsAccepted': False}, 'termsAccepted', 'You must accept the Terms of Use.'),
+            ({'termsAccepted': None}, 'termsAccepted', 'You must accept the Terms of Use.'),
+            ({'termsAccepted': True}, 'termsVersion', 'The Terms of Use have changed, reload the page.'),
+            ({'termsAccepted': True, 'termsVersion': '2026-01-01'}, 'termsVersion',
+             'The Terms of Use have changed, reload the page.'),
+        ]
+        for terms, field, message in cases:
+            with self.subTest(terms=terms):
+                r = self.post('/auth/register', email='anna@example.com', password=STRONG, **terms)
+                self.assertEqual(r.status_code, 400)
+                self.assertEqual(r.json()[field], [message])
+        self.assertFalse(User.objects.exists())
+        self.assertEqual(mail.outbox, [])
 
     def test_register_errors(self):
         User.objects.create_user('taken@example.com', 'taken@example.com', STRONG)
         cases = [
-            ({'email': 'taken@example.com', 'password': STRONG}, 'email'),
-            ({'email': 'no-at-sign', 'password': STRONG}, 'email'),
-            ({'email': 'anna@example.com', 'password': '12345678'}, 'password'),
-            ({'email': 'anna@example.com'}, 'password'),
+            ({'email': 'taken@example.com', 'password': STRONG, **TERMS}, 'email'),
+            ({'email': 'no-at-sign', 'password': STRONG, **TERMS}, 'email'),
+            ({'email': 'anna@example.com', 'password': '12345678', **TERMS}, 'password'),
+            ({'email': 'anna@example.com', **TERMS}, 'password'),
         ]
         for data, field in cases:
             with self.subTest(data=data):
@@ -39,7 +62,7 @@ class RegistrationApiTest(ApiTestCase):
         self.assertEqual(mail.outbox, [])
 
     def test_confirm_email(self):
-        self.post('/auth/register', email='anna@example.com', password=STRONG)
+        self.post('/auth/register', email='anna@example.com', password=STRONG, **TERMS)
         token = link_token(mail.outbox[0])
         r = self.post('/auth/confirm-email', token=token)
         self.assertEqual(r.status_code, 200)
@@ -57,7 +80,7 @@ class RegistrationApiTest(ApiTestCase):
                 self.assertEqual(self.post('/auth/confirm-email', token=token).status_code, 400)
 
     def test_resend_always_204(self):
-        self.post('/auth/register', email='anna@example.com', password=STRONG)
+        self.post('/auth/register', email='anna@example.com', password=STRONG, **TERMS)
         User.objects.create_user('bob@example.com', 'bob@example.com', STRONG)
         mail.outbox.clear()
         for email in ('anna@example.com', 'bob@example.com', 'nobody@example.com', 'not-an-email'):

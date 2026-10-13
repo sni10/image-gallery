@@ -2,13 +2,15 @@ from io import StringIO
 
 import yaml
 from django.core.management import call_command
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 
 PATHS = {
     '/photos', '/photos/{photo_id}', '/categories', '/galleries', '/galleries/{id}', '/galleries/{id}/photos',
     '/auth/register', '/auth/confirm-email', '/auth/resend-confirmation', '/auth/login', '/auth/refresh',
     '/auth/logout', '/auth/confirm-email-change', '/me', '/me/email', '/me/password',
-    '/me/favorites', '/me/favorites/{photo_id}', '/ingest/photos',
+    '/me/favorites', '/me/favorites/{photo_id}', '/ingest/photos', '/complaints', '/photos/{photo_id}/similar',
+    '/me/collections', '/me/collections/{id}', '/me/collections/{id}/photos', '/me/collections/{id}/photos/{photo_id}',
+    '/tags',
 }
 
 
@@ -51,10 +53,33 @@ class OpenApiSchemaTest(SimpleTestCase):
                          {'type': 'http', 'scheme': 'bearer', 'bearerFormat': 'JWT'})
         self.assertEqual(self.responses('/auth/login', 'post'), {'200', '401', '403', '429'})
         self.assertEqual(self.responses('/me/password', 'post'), {'200', '400', '401', '429'})
+        self.assertEqual(self.responses('/me', 'delete'), {'204', '400', '401', '403', '429'})
         self.assertEqual(self.responses('/me/favorites/{photo_id}', 'put'), {'204', '401', '404'})
         login_body = self.schema['paths']['/auth/login']['post']['requestBody']['content']['application/json']
         self.assertEqual(login_body['schema']['$ref'], '#/components/schemas/Login')
         self.assertEqual(set(self.schema['components']['schemas']['TokenPair']['required']), {'access', 'refresh'})
+
+    def test_register_contract(self):
+        register = self.schema['components']['schemas']['Register']
+        self.assertEqual(set(register['required']), {'email', 'password', 'termsAccepted', 'termsVersion'})
+        self.assertEqual(register['properties']['termsAccepted']['type'], 'boolean')
+
+    @override_settings(COMPLAINTS_EMAIL='secret-admin@example.com')
+    def test_complaints_contract(self):
+        self.assertEqual(self.responses('/complaints', 'post'), {'204', '400', '429'})
+        self.assertEqual(set(self.schema['components']['schemas']['Complaint']['required']), {'email', 'message'})
+        out = StringIO()
+        call_command('spectacular', stdout=out)
+        self.assertNotIn('secret-admin', out.getvalue())
+
+    def test_feed_similar_collections_contract(self):
+        sort = next(p for p in self.schema['paths']['/photos']['get']['parameters'] if p['name'] == 'sort')
+        self.assertEqual(set(sort['schema']['enum']), {'random', 'new', 'popular'})
+        self.assertEqual(self.responses('/photos/{photo_id}/similar', 'get'), {'200', '400', '404'})
+        self.assertEqual(self.responses('/me/collections/{id}/photos/{photo_id}', 'put'), {'204', '400', '401', '404'})
+        collection = self.schema['components']['schemas']['CollectionWithCover']
+        self.assertEqual(set(collection['required']), {'id', 'title', 'photosCount', 'cover'})  # hasPhoto optional
+        self.assertIn('hasPhoto', collection['properties'])
 
     def test_ingest_contract(self):
         ingest = self.schema['paths']['/ingest/photos']['post']
@@ -69,3 +94,5 @@ class OpenApiPagesTest(TestCase):
         self.assertEqual(self.client.get('/api/schema/').status_code, 200)
         self.assertContains(self.client.get('/api/docs/'), 'swagger-ui')
         self.assertContains(self.client.get('/api/redoc/'), 'redoc')
+
+

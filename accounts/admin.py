@@ -11,8 +11,8 @@ class ProfileInline(admin.StackedInline):
     model = Profile
     form = PublicIdModelForm
     can_delete = False
-    fields = ['link_date', 'public_id']
-    readonly_fields = ['public_id']
+    fields = ['link_date', 'public_id', 'terms_version', 'terms_accepted_at']
+    readonly_fields = ['public_id', 'terms_version', 'terms_accepted_at']
     verbose_name_plural = 'Публичная ссылка'
 
 

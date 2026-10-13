@@ -5,7 +5,7 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from ..models import Category, Gallery, Photo
+from ..models import Category, Collection, Gallery, Photo
 from ..services import PhotoQueries
 from ..services.signed_media import signed_query
 
@@ -182,3 +182,68 @@ class IngestGallerySerializer(serializers.ModelSerializer):
 class PhotoIngestResultSerializer(serializers.Serializer):
     photo = PhotoSerializer()
     gallery = IngestGallerySerializer(source='photo.gallery')
+
+
+class ComplaintSerializer(serializers.Serializer):
+    email = serializers.EmailField(max_length=254, help_text='Куда ответить')
+    photoUrl = serializers.URLField(max_length=500, required=False, allow_blank=True, default='',
+                                    help_text='Ссылка на фото, необязательно')
+    message = serializers.CharField(min_length=10, max_length=5000, help_text='10–5000 символов')
+
+
+class CollectionSerializer(serializers.ModelSerializer):
+    """Expects collections from CollectionQueries.of_user()."""
+
+    id = serializers.CharField(source='public_id', read_only=True, help_text='Публичный id: 26 символов [a-z2-7], не число')
+    title = serializers.CharField(max_length=100, help_text='1–100 символов, пробелы по краям обрезаются')
+    photosCount = serializers.IntegerField(source='photos_count', read_only=True, help_text='Сколько фото в коллекции')
+
+    class Meta:
+        model = Collection
+        fields = ['id', 'title', 'photosCount']
+
+
+class CollectionWithCoverSerializer(CollectionSerializer):
+    """Expects covers from CollectionQueries.attach_covers()."""
+
+    cover = PhotoSerializer(read_only=True, allow_null=True, help_text='Последнее добавленное фото; null, если пусто')
+    hasPhoto = serializers.BooleanField(
+        source='has_photo', required=False,  # not read_only: OpenAPI marks read-only fields required
+        help_text='Только при ?photo=<id>: есть ли это фото в коллекции',
+    )
+
+    class Meta(CollectionSerializer.Meta):
+        fields = [*CollectionSerializer.Meta.fields, 'cover', 'hasPhoto']
+
+
+class FeedFiltersSerializer(serializers.Serializer):
+    """Query params of GET /photos that narrow the feed."""
+
+    tag = serializers.CharField(required=False, help_text='Только фото с этим тегом. Регистр, # и пробелы по краям не важны')
+    q = serializers.CharField(required=False, min_length=2, max_length=100,
+                              help_text='Поиск: часть тега, описания, названия фото, галереи или категории; 2–100 символов')
+
+    def validate_tag(self, value):
+        return clean_tag(value)
+
+
+def clean_tag(value: str) -> str:
+    """A tag from a query string: case, a leading # and outer spaces don't matter."""
+    tag = value.lstrip('#').strip().lower()
+    if not tag or len(tag) > MAX_TAG_LENGTH:
+        raise serializers.ValidationError(f'Must be 1-{MAX_TAG_LENGTH} characters.')
+    return tag
+
+
+class TagsQuerySerializer(serializers.Serializer):
+    related = serializers.CharField(required=False, help_text='Тег: отдать теги, которые стоят на одних фото с ним. '
+                                                              'Регистр, # и пробелы по краям не важны')
+    limit = serializers.IntegerField(required=False, min_value=1, max_value=50, default=20, help_text='1–50')
+
+    def validate_related(self, value):
+        return clean_tag(value)
+
+
+class TagCountSerializer(serializers.Serializer):
+    tag = serializers.CharField()
+    count = serializers.IntegerField(help_text='С related — число общих фото с этим тегом, без — число фото с тегом')

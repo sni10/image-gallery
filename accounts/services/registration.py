@@ -1,8 +1,10 @@
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db import transaction
+from django.utils import timezone
 
 from .email_tokens import EmailTokenService
 from .emails import AccountEmails
@@ -25,9 +27,10 @@ class RegistrationService:
         self._token_pairs = token_pairs or TokenPairService()
 
     @transaction.atomic
-    def register(self, email: str, password: str):
+    def register(self, email: str, password: str, terms_version: str | None = None):
         """Create an inactive account and email a confirmation link. Re-registering an unconfirmed
-        email replaces its password (old links die) and sends a new link. Raises ValidationError."""
+        email replaces its password (old links die) and sends a new link. Records which edition of the
+        Terms of Use was accepted (default: the current one) and when. Raises ValidationError."""
         email = normalize_email(email)
         try:
             validate_email(email)
@@ -44,6 +47,9 @@ class RegistrationService:
             raise ValidationError({'password': exc.messages})
         user.set_password(password)
         user.save()
+        profile = user.profile  # created by the signal on the first save
+        profile.terms_version, profile.terms_accepted_at = terms_version or settings.TERMS_VERSION, timezone.now()
+        profile.save(update_fields=['terms_version', 'terms_accepted_at'])
         self._emails.send_confirmation(user, self._tokens.make(user, CONFIRM))  # failure rolls the account back
         return user
 

@@ -16,7 +16,7 @@ class SitemapTest(TestCase):
         r = self.client.get('/sitemap.xml')
         self.assertEqual(r.status_code, 200)
         body = r.content.decode()
-        for path in ('/', '/galleries', '/categories/ai', f'/galleries/{full.public_id}', f'/photos/{photo.public_id}'):
+        for path in ('/', '/galleries', '/terms', '/privacy', '/categories/ai', f'/galleries/{full.public_id}', f'/photos/{photo.public_id}'):
             self.assertIn(f'<loc>https://artai.win{path}</loc>', body)
         self.assertNotIn(empty.public_id, body)
         self.assertNotIn('/categories/comics', body)

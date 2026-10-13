@@ -1,7 +1,8 @@
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 from django.conf import settings
 from django.contrib.sitemaps import Sitemap
+from django.db import connection
 from django.db.models import Max
 
 from .models import Category, Gallery, Photo
@@ -19,7 +20,7 @@ class FrontendSitemap(Sitemap):
 
 class PageSitemap(FrontendSitemap):
     def items(self):
-        return ['/', '/galleries']
+        return ['/', '/galleries', '/terms', '/privacy']
 
     def location(self, item):
         return item
@@ -49,6 +50,27 @@ class GallerySitemap(FrontendSitemap):
         return item.updated
 
 
+class TagSitemap(FrontendSitemap):
+    """Tag pages with at least MIN_PHOTOS photos (no thin pages).
+    ponytail: unnest + GROUP BY over all photos per sitemap request; a Tag model with counts if tags get many."""
+
+    MIN_PHOTOS = 3
+
+    def items(self):
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f'SELECT tag, max(created_at) FROM {Photo._meta.db_table}, unnest(tags) AS tag '
+                'GROUP BY tag HAVING count(DISTINCT id) >= %s ORDER BY tag', [self.MIN_PHOTOS],
+            )
+            return cursor.fetchall()
+
+    def location(self, item):
+        return f'/tags/{quote(item[0], safe="")}'
+
+    def lastmod(self, item):
+        return item[1]
+
+
 class PhotoSitemap(FrontendSitemap):
     # ponytail: one file, Django caps each section at 50 000 urls; switch to sitemaps.views.index near that
     def items(self):
@@ -61,4 +83,5 @@ class PhotoSitemap(FrontendSitemap):
         return item.created_at
 
 
-SITEMAPS = {'pages': PageSitemap, 'categories': CategorySitemap, 'galleries': GallerySitemap, 'photos': PhotoSitemap}
+SITEMAPS = {'pages': PageSitemap, 'categories': CategorySitemap, 'galleries': GallerySitemap, 'tags': TagSitemap,
+            'photos': PhotoSitemap}

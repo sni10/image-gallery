@@ -134,6 +134,14 @@ class IngestSettings(Section):
         return key
 
 
+class ComplaintsSettings(Section):
+    """POST /complaints emails go here. Never sent to clients; the real address lives only in the server's .env."""
+
+    model_config = SettingsConfigDict(env_prefix='COMPLAINTS_')
+
+    email: str = ''  # empty -> complaints are only stored (admin), no email
+
+
 class AppSettings(BaseModel):
     django: DjangoSettings
     db: DatabaseSettings
@@ -143,3 +151,4 @@ class AppSettings(BaseModel):
     frontend: FrontendSettings
     email: EmailSettings
     ingest: IngestSettings
+    complaints: ComplaintsSettings

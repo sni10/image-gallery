@@ -10,3 +10,7 @@ db.sqlite3
 reports
 .coverage
 htmlcov
+# docs, specs and deploy scripts: server IP, admin addresses — not for a pullable image
+*.md
+deploy/
+.env*.example

@@ -1,6 +1,7 @@
 import re
 from urllib.parse import unquote
 
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.core import mail
 from django.core.exceptions import ValidationError
@@ -32,6 +33,15 @@ class RegistrationServiceTest(TestCase):
         self.assertTrue(link_token(mail.outbox[0]))
         self.assertEqual(mail.outbox[0].subject, 'Confirm your email')
         self.assertTrue(mail.outbox[0].body.isascii())  # emails are in English
+        self.assertEqual(user.profile.terms_version, settings.TERMS_VERSION)
+        self.assertIsNotNone(user.profile.terms_accepted_at)
+
+    def test_reregister_records_terms_again(self):
+        first = self.service.register('anna@example.com', STRONG, '2026-01-01').profile.terms_accepted_at
+        profile = self.service.register('anna@example.com', STRONG, '2026-10-12').profile
+        profile.refresh_from_db()
+        self.assertEqual(profile.terms_version, '2026-10-12')
+        self.assertGreater(profile.terms_accepted_at, first)
 
     def test_confirmed_email_taken(self):
         User.objects.create_user('anna@example.com', 'anna@example.com', STRONG)
