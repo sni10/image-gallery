@@ -8,7 +8,8 @@ PATHS = {
     '/photos', '/photos/{photo_id}', '/categories', '/galleries', '/galleries/{id}', '/galleries/{id}/photos',
     '/auth/register', '/auth/confirm-email', '/auth/resend-confirmation', '/auth/login', '/auth/refresh',
     '/auth/logout', '/auth/confirm-email-change', '/me', '/me/email', '/me/password',
-    '/me/favorites', '/me/favorites/{photo_id}', '/ingest/photos', '/complaints',
+    '/me/favorites', '/me/favorites/{photo_id}', '/ingest/photos', '/complaints', '/photos/{photo_id}/similar',
+    '/me/collections', '/me/collections/{id}', '/me/collections/{id}/photos', '/me/collections/{id}/photos/{photo_id}',
 }
 
 
@@ -70,6 +71,15 @@ class OpenApiSchemaTest(SimpleTestCase):
         call_command('spectacular', stdout=out)
         self.assertNotIn('secret-admin', out.getvalue())
 
+    def test_feed_similar_collections_contract(self):
+        sort = next(p for p in self.schema['paths']['/photos']['get']['parameters'] if p['name'] == 'sort')
+        self.assertEqual(sort['schema']['enum'], ['random', 'new', 'popular'])
+        self.assertEqual(self.responses('/photos/{photo_id}/similar', 'get'), {'200', '400', '404'})
+        self.assertEqual(self.responses('/me/collections/{id}/photos/{photo_id}', 'put'), {'204', '400', '401', '404'})
+        collection = self.schema['components']['schemas']['CollectionWithCover']
+        self.assertEqual(set(collection['required']), {'id', 'title', 'photosCount', 'cover'})  # hasPhoto optional
+        self.assertIn('hasPhoto', collection['properties'])
+
     def test_ingest_contract(self):
         ingest = self.schema['paths']['/ingest/photos']['post']
         self.assertEqual(set(ingest['responses']), {'200', '201', '400', '403', '404'})
@@ -83,3 +93,5 @@ class OpenApiPagesTest(TestCase):
         self.assertEqual(self.client.get('/api/schema/').status_code, 200)
         self.assertContains(self.client.get('/api/docs/'), 'swagger-ui')
         self.assertContains(self.client.get('/api/redoc/'), 'redoc')
+
+

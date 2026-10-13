@@ -1,7 +1,7 @@
 from django.urls import path
 
+from .collections import CollectionDetailView, CollectionListView, CollectionPhotoListView, CollectionPhotoView
 from .complaints import ComplaintView
-
 from .views import (
     CategoryListView, FavoriteListView, FavoriteView, GalleryDetailView, GalleryListView, GalleryPhotoListView,
     PhotoDetailView, PhotoIngestView, RandomPhotoListView, SimilarPhotoListView,
@@ -17,6 +17,10 @@ urlpatterns = [
     path('galleries/<str:id>/photos', GalleryPhotoListView.as_view(), name='gallery-photos'),
     path('me/favorites', FavoriteListView.as_view(), name='favorite-list'),
     path('me/favorites/<str:photo_id>', FavoriteView.as_view(), name='favorite'),
+    path('me/collections', CollectionListView.as_view(), name='collection-list'),
+    path('me/collections/<str:id>', CollectionDetailView.as_view(), name='collection-detail'),
+    path('me/collections/<str:id>/photos', CollectionPhotoListView.as_view(), name='collection-photos'),
+    path('me/collections/<str:id>/photos/<str:photo_id>', CollectionPhotoView.as_view(), name='collection-photo'),
     path('ingest/photos', PhotoIngestView.as_view(), name='photo-ingest'),
     path('complaints', ComplaintView.as_view(), name='complaints'),
 ]

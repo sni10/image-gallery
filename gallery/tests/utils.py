@@ -22,3 +22,14 @@ def make_category(slug='test', title=None, position=0):
 
 def gallery(title='Test', category=None):
     return Gallery.objects.create(title=title, category=category or make_category())
+
+
+def photo(gallery, tags=(), name='original/p.jpg'):
+    """A row without files (fast); the serializer builds links from the name. Use with a temporary MEDIA_ROOT."""
+    from ..models import Photo
+    return Photo.objects.create(gallery=gallery, image=name, tags=list(tags))
+
+
+def bearer(user):
+    from accounts.services.access_tokens import AccessTokenService
+    return {'HTTP_AUTHORIZATION': f'Bearer {AccessTokenService().issue(user)}'}
