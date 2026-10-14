@@ -103,14 +103,38 @@ class FavoritesTest(TestCase):
         self.assertTrue(catalog_cover['isFavorite'])
         self.assertFalse(self.client.get(f'/galleries/{self.gallery.public_id}').json()['cover']['isFavorite'])
 
-    def test_no_n_plus_one(self):
-        def queries_for_list():
-            with CaptureQueriesContext(connection) as ctx:
-                self.client.get(f'/galleries/{self.gallery.public_id}/photos', **self.auth(self.anna))
-            return len(ctx.captured_queries)
+    def test_gallery_in_photo_lists(self):
+        self.put(self.a.public_id)
+        ref = {'id': self.gallery.public_id, 'title': self.gallery.title}
+        urls = [f'/galleries/{self.gallery.public_id}/photos', '/photos?seed=abc', '/me/favorites',
+                f'/photos/{self.a.public_id}/similar']
+        for url in urls:
+            for headers in ({}, self.auth(self.anna)):
+                with self.subTest(url=url, auth=bool(headers)):
+                    r = self.client.get(url, **headers)
+                    if r.status_code == 401:  # favorites: guests get none
+                        continue
+                    self.assertTrue(r.json()['items'])
+                    self.assertTrue(all(p['gallery'] == ref for p in r.json()['items']))  # locked ones too
+        self.assertEqual(self.client.get(f'/galleries/{self.gallery.public_id}').json()['cover']['gallery'], ref)
+        detail = self.client.get(f'/photos/{self.a.public_id}').json()['gallery']
+        self.assertEqual(set(detail), {'id', 'title', 'category'})
 
-        before = queries_for_list()
+    def test_no_n_plus_one(self):
+        urls = [f'/galleries/{self.gallery.public_id}/photos', '/photos?seed=abc&limit=20', '/photos?sort=new&limit=20']
+
+        def queries_for_lists():
+            counts = []
+            for url in urls:
+                for headers in ({}, self.auth(self.anna)):
+                    with CaptureQueriesContext(connection) as ctx:
+                        self.client.get(url, **headers)
+                    counts.append(len(ctx.captured_queries))
+            return counts
+
+        before = queries_for_lists()
+        other = gallery('Other')
         for i in range(5):
-            photo = PhotoService().create(jpeg(200 + i, 100), self.gallery)
+            photo = PhotoService().create(jpeg(200 + i, 100), (self.gallery, other)[i % 2])
             self.put(photo.public_id)
-        self.assertEqual(queries_for_list(), before)
+        self.assertEqual(queries_for_lists(), before)

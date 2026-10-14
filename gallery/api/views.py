@@ -27,6 +27,7 @@ from .serializers import (
 SEED_RE = re.compile(r'^[A-Za-z0-9]{1,32}$')
 FEED_SORTS = {'random': None, 'new': PhotoQueries.newest, 'popular': PhotoQueries.popular}  # random needs the seed
 SIMILAR_LIMIT, SIMILAR_MAX = 12, 24
+GALLERY_Q_MAX = 100
 
 BAD_PARAMS = OpenApiResponse(description='page или limit не целое число или меньше 1, например {"page": "must be >= 1"}')
 NOT_FOUND = OpenApiResponse(description='Галереи с таким id нет (в том числе старый id после перевыпуска ссылки)')
@@ -50,11 +51,20 @@ class CategoryListView(ListAPIView):
 @extend_schema(
     summary='Каталог галерей',
     description='Сначала новые. Обложка — выбранная в админке, иначе случайное фото галереи (новое при каждом запросе).',
-    parameters=[OpenApiParameter(
-        'category', str, required=False,
-        description='slug категории из GET /categories: только её галереи. Неизвестный slug — пустой список.',
-    )],
-    responses={200: GallerySerializer(many=True), 400: BAD_PARAMS},
+    parameters=[
+        OpenApiParameter(
+            'category', str, required=False,
+            description='slug категории из GET /categories: только её галереи. Неизвестный slug — пустой список.',
+        ),
+        OpenApiParameter(
+            'q', str, required=False,
+            description=f'Часть названия галереи, без учёта регистра; вместе с category — через И. Пробелы по краям '
+                        f'обрезаются, пустой q — без фильтра. До {GALLERY_Q_MAX} символов.',
+        ),
+    ],
+    responses={200: GallerySerializer(many=True),
+               400: OpenApiResponse(description=f'Неверный page/limit или q длиннее {GALLERY_Q_MAX} символов, '
+                                                'например {"q": ["..."]}')},
 )
 class GalleryListView(ListAPIView):
     serializer_class = GallerySerializer
@@ -63,7 +73,13 @@ class GalleryListView(ListAPIView):
     def get_queryset(self):
         galleries = GalleryQueries.with_stats()
         category = self.request.query_params.get('category')
-        return galleries.filter(category__slug=category) if category else galleries
+        if category:
+            galleries = galleries.filter(category__slug=category)
+        q = self.request.query_params.get('q', '').strip()
+        if len(q) > GALLERY_Q_MAX:
+            raise ValidationError({'q': [f'Ensure this field has no more than {GALLERY_Q_MAX} characters.']})
+        # ponytail: plain icontains, fine for thousands of galleries; trigram GIN index on title if it gets slow
+        return galleries.filter(title__icontains=q) if q else galleries
 
     def paginate_queryset(self, queryset):
         return GalleryQueries.attach_covers(super().paginate_queryset(queryset), self.request.user)

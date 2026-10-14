@@ -10,8 +10,16 @@ from ..services import PhotoQueries
 from ..services.signed_media import signed_query
 
 
-class PhotoSerializer(serializers.ModelSerializer):
+class GalleryRefSerializer(serializers.ModelSerializer):
     id = serializers.CharField(source='public_id', read_only=True, help_text='Публичный id: 26 символов [a-z2-7], не число')
+
+    class Meta:
+        model = Gallery
+        fields = ['id', 'title']
+
+
+class PhotoSerializer(serializers.ModelSerializer):
+    id =serializers.CharField(source='public_id', read_only=True, help_text='Публичный id: 26 символов [a-z2-7], не число')
     url = serializers.SerializerMethodField(
         help_text='Оригинал со знаком (jpg/png/webp/gif/avif), подписанная ссылка с ограниченным сроком (exp, sig). '
                   'null, если фото закрыто (locked). Для лайтбокса и зума 1:1',
@@ -27,10 +35,14 @@ class PhotoSerializer(serializers.ModelSerializer):
     isFavorite = serializers.BooleanField(
         source='is_favorite', read_only=True, help_text='В избранном у текущего пользователя; для анонима всегда false',
     )
+    gallery = GalleryRefSerializer(
+        read_only=True, help_text='Галерея фото: id и название, для ссылки "открыть галерею" в сетке',
+    )
 
     class Meta:
         model = Photo
-        fields = ['id', 'title', 'description', 'tags', 'url', 'thumbUrl', 'width', 'height', 'isFavorite', 'locked']
+        fields = ['id', 'title', 'description', 'tags', 'url', 'thumbUrl', 'width', 'height', 'isFavorite', 'locked',
+                  'gallery']
         extra_kwargs = {
             'title': {'help_text': 'Название; если не задано — имя загруженного файла'},
             'description': {'help_text': 'Описание, может быть пустым'},
@@ -92,13 +104,11 @@ class GallerySerializer(serializers.ModelSerializer):
         fields = ['id', 'title', 'category', 'photosCount', 'cover']
 
 
-class PhotoGallerySerializer(serializers.ModelSerializer):
-    id = serializers.CharField(source='public_id', read_only=True, help_text='Публичный id: 26 символов [a-z2-7], не число')
+class PhotoGallerySerializer(GalleryRefSerializer):
     category = CategorySerializer(read_only=True, help_text='Категория галереи, всегда заполнена')
 
-    class Meta:
-        model = Gallery
-        fields = ['id', 'title', 'category']
+    class Meta(GalleryRefSerializer.Meta):
+        fields = [*GalleryRefSerializer.Meta.fields, 'category']
 
 
 class PhotoDetailSerializer(PhotoSerializer):
@@ -111,7 +121,7 @@ class PhotoDetailSerializer(PhotoSerializer):
     )
 
     class Meta(PhotoSerializer.Meta):
-        fields = [*PhotoSerializer.Meta.fields, 'gallery', 'prevId', 'nextId']
+        fields = [*PhotoSerializer.Meta.fields, 'prevId', 'nextId']  # `gallery` overridden above, with category
 
     @extend_schema_field(serializers.CharField(allow_null=True))
     def get_prevId(self, obj):

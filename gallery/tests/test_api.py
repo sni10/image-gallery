@@ -4,9 +4,10 @@ from django.test import TestCase, override_settings
 
 from ..models import Gallery
 from ..services import PhotoService
-from .utils import gallery, jpeg
+from .utils import gallery, jpeg, make_category
 
-PHOTO_KEYS = {'id', 'title', 'description', 'tags', 'url', 'thumbUrl', 'width', 'height', 'isFavorite', 'locked'}
+PHOTO_KEYS = {'id', 'title', 'description', 'tags', 'url', 'thumbUrl', 'width', 'height', 'isFavorite', 'locked',
+              'gallery'}
 
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp(), ORIGINALS_ROOT=tempfile.mkdtemp(), MEDIA_URL='/media/')  # URLs must not depend on local .env
@@ -36,6 +37,20 @@ class GalleryApiTest(TestCase):
 
     def test_page_past_end_is_empty(self):
         self.assertEqual(self.client.get('/galleries?page=99').json(), {'items': [], 'total': 3})
+
+    def test_search_by_title(self):
+        nature = make_category('nature')
+        mountains, _ = gallery('Горы Алтая', nature), gallery('Горы Кавказа')  # second one in category "test"
+        titles = lambda query: [g['title'] for g in self.client.get(f'/galleries{query}').json()['items']]
+        self.assertEqual(titles('?q=горы'), ['Горы Кавказа', 'Горы Алтая'])  # case-insensitive Cyrillic
+        self.assertEqual(titles('?q=ULL'), ['Full'])  # part of the title
+        self.assertEqual(titles('?q=горы&category=nature'), [mountains.title])
+        self.assertEqual(titles('?q=%20%20'), titles(''))  # blank q = no filter (covers are random, compare titles)
+        self.assertEqual(titles('?q='), titles(''))
+        self.assertEqual(self.client.get('/galleries?q=nothing').json(), {'items': [], 'total': 0})
+        self.assertEqual(self.client.get(f'/galleries?q={"x" * 100}').status_code, 200)
+        r = self.client.get(f'/galleries?q={"x" * 101}')
+        self.assertEqual((r.status_code, list(r.json())), (400, ['q']))
 
     def test_invalid_params(self):
         self.assertEqual(self.client.get('/galleries?page=0').status_code, 400)

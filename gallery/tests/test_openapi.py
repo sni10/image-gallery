@@ -6,7 +6,8 @@ from django.test import SimpleTestCase, TestCase, override_settings
 
 PATHS = {
     '/photos', '/photos/{photo_id}', '/categories', '/galleries', '/galleries/{id}', '/galleries/{id}/photos',
-    '/auth/register', '/auth/confirm-email', '/auth/resend-confirmation', '/auth/login', '/auth/refresh',
+    '/auth/register', '/auth/confirm-email', '/auth/resend-confirmation', '/auth/password-reset', '/auth/password-reset/confirm',
+    '/auth/login', '/auth/refresh',
     '/auth/logout', '/auth/confirm-email-change', '/me', '/me/email', '/me/password',
     '/me/favorites', '/me/favorites/{photo_id}', '/ingest/photos', '/complaints', '/photos/{photo_id}/similar',
     '/me/collections', '/me/collections/{id}', '/me/collections/{id}/photos', '/me/collections/{id}/photos/{photo_id}',
@@ -42,7 +43,7 @@ class OpenApiSchemaTest(SimpleTestCase):
             self.assertIn('Публичный id', schema['components']['schemas'][name]['properties']['id']['description'])
         self.assertIn('category', schema['components']['schemas']['Gallery']['required'])
         catalog_params = {p['name'] for p in schema['paths']['/galleries']['get']['parameters']}
-        self.assertEqual(catalog_params, {'page', 'limit', 'category'})
+        self.assertEqual(catalog_params, {'page', 'limit', 'category', 'q'})
         categories = schema['paths']['/categories']['get']['responses']['200']['content']['application/json']['schema']
         self.assertEqual(categories['type'], 'array')  # not paginated
         self.assertEqual(set(schema['components']['schemas']['CategoryWithCount']['required']),

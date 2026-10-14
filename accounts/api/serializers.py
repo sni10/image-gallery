@@ -41,6 +41,15 @@ class TokenSerializer(serializers.Serializer):
     token = serializers.CharField(help_text='Токен из ссылки в письме')
 
 
+class PasswordResetSerializer(serializers.Serializer):
+    email = serializers.EmailField(max_length=254, help_text='Регистр и пробелы по краям не важны')
+
+
+class PasswordResetConfirmSerializer(TokenSerializer):
+    password = serializers.CharField(write_only=True, trim_whitespace=False,
+                                     help_text='Новый пароль: те же правила, что при регистрации')
+
+
 class LoginSerializer(serializers.Serializer):
     email = serializers.CharField(max_length=254)
     password = serializers.CharField(write_only=True, trim_whitespace=False)

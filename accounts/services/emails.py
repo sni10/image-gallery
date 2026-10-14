@@ -30,6 +30,14 @@ class AccountEmails:
             "If you didn't do this, contact support right away.",
         )
 
+    def send_password_reset(self, user, token: str) -> None:
+        self._send(
+            user.email, 'Reset your password',
+            'To set a new password for your ArtAI account, open this link '
+            f'(valid for 1 hour):\n\n{self._link("reset-password", token)}\n\n'
+            "If you didn't request a password reset, just ignore this email.",
+        )
+
     @staticmethod
     def _link(path: str, token: str) -> str:
         return f'{settings.FRONTEND_URL}/{path}?token={quote(token, safe="")}'
