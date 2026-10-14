@@ -10,13 +10,15 @@ from rest_framework.views import APIView
 
 from ..services.auth import AuthService, EmailNotConfirmed, InvalidCredentials
 from ..services.email_tokens import InvalidEmailToken
+from ..services.password_reset import PasswordResetService
 from ..services.profile import AdminAccountProtected, ProfileService
 from ..services.registration import RegistrationService
 from ..services.token_pairs import InvalidRefreshToken
-from ..throttling import IPScopedRateThrottle
+from ..throttling import EmailScopedRateThrottle, IPScopedRateThrottle
 from .serializers import (
     ChangedEmailSerializer, ChangeEmailSerializer, ChangePasswordSerializer, EmailSerializer, LoginSerializer,
-    MeSerializer, PasswordSerializer, RefreshSerializer, RegisteredSerializer, RegisterSerializer, TokenPairSerializer, TokenSerializer,
+    MeSerializer, PasswordResetConfirmSerializer, PasswordResetSerializer, PasswordSerializer, RefreshSerializer,
+    RegisteredSerializer, RegisterSerializer, TokenPairSerializer, TokenSerializer,
 )
 
 UNAUTHORIZED = OpenApiResponse(description='Нет действующего access-токена')
@@ -84,6 +86,50 @@ class ResendConfirmationView(AuthThrottled):
     def post(self, request):
         self.registration.resend_confirmation(validated(EmailSerializer, request)['email'])
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class PasswordResetView(APIView):
+    throttle_classes = [IPScopedRateThrottle, EmailScopedRateThrottle]
+    throttle_scope = 'password_reset'
+    passwords = PasswordResetService()
+
+    @extend_schema(
+        summary='Забыли пароль: прислать ссылку для сброса', request=PasswordResetSerializer,
+        responses={
+            204: OpenApiResponse(description='Всегда, даже если аккаунта нет — не раскрывает, кто зарегистрирован. '
+                                             'Письмо со ссылкой {FRONTEND_URL}/reset-password?token=…, живёт 1 час'),
+            400: OpenApiResponse(description='email не похож на адрес: {"email": ["..."]}'),
+            429: OpenApiResponse(description='Больше 5 запросов в час с одного IP или на один email'),
+        },
+    )
+    def post(self, request):
+        self.passwords.request(validated(PasswordResetSerializer, request)['email'])
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class PasswordResetConfirmView(AuthThrottled):
+    throttle_scope = 'password_reset_confirm'
+    passwords = PasswordResetService()
+
+    @extend_schema(
+        summary='Задать новый пароль по ссылке из письма', request=PasswordResetConfirmSerializer,
+        responses={
+            429: THROTTLED,
+            200: OpenApiResponse(TokenPairSerializer, description='Пароль сменён, пользователь вошёл; все прежние '
+                                                                  'refresh-токены отозваны, email считается подтверждённым'),
+            400: OpenApiResponse(description='{"token": ["..."]} — ссылка недействительна, устарела или уже '
+                                             'использована; {"password": ["..."]} — слабый пароль, ссылка остаётся рабочей'),
+        },
+    )
+    def post(self, request):
+        data = validated(PasswordResetConfirmSerializer, request)
+        try:
+            pair = self.passwords.confirm(data['token'], data['password'])
+        except InvalidEmailToken:
+            raise ValidationError({'token': [BAD_LINK]})
+        except DjangoValidationError as exc:
+            raise api_fields(exc, {})
+        return Response(asdict(pair))
 
 
 class LoginView(AuthThrottled):

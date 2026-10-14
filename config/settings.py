@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 
 import os
 import tempfile
+from datetime import timedelta
 from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
@@ -164,6 +165,7 @@ MAILERS = {
 DEFAULT_FROM_EMAIL = ENV.email.sender
 
 FRONTEND_URL = ENV.frontend.url  # links in emails point to the SPA
+PASSWORD_RESET_TTL = timedelta(hours=1)  # life of the link in the "Reset your password" email
 
 # Edition of the Terms of Use (artai.win/terms) a registration must accept. Change together with the
 # front's TERMS_VERSION (src/api.ts) whenever the text changes.
@@ -207,8 +209,9 @@ REST_FRAMEWORK = {
     # Counters live in CACHES below, shared by all gunicorn workers.
     'DEFAULT_THROTTLE_RATES': {
         **{scope: '10/min' for scope in ('register', 'login', 'resend_confirmation', 'confirm_email', 'change_password',
-                                           'delete_account')},
+                                           'delete_account', 'password_reset_confirm')},
         'complaint': '5/hour',
+        'password_reset': '5/hour',  # per IP and, separately, per email (EmailScopedRateThrottle)
     },
     # The app runs behind exactly one proxy (Caddy): it sends one X-Forwarded-For value, the client IP
     'NUM_PROXIES': 1,

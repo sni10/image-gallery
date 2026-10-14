@@ -1,3 +1,6 @@
+import time
+from unittest.mock import patch
+
 from django.contrib.auth.models import User
 from django.core import mail
 from django.core.cache import cache
@@ -154,3 +157,73 @@ class ThrottlingTest(ApiTestCase):
         self.assertEqual(self.post('/auth/login', ip='10.0.0.2', email='a@example.com', password='x').status_code, 401)
         spoofed = self.post('/auth/login', ip='1.2.3.4, 10.0.0.1', email='a@example.com', password='x')
         self.assertEqual(spoofed.status_code, 429)  # a forged first X-Forwarded-For entry doesn't reset the limit
+
+
+class PasswordResetApiTest(ApiTestCase):
+    def setUp(self):
+        super().setUp()
+        self.user = User.objects.create_user('anna@example.com', 'anna@example.com', STRONG)
+        self.session = self.post('/auth/login', email='anna@example.com', password=STRONG).json()
+
+    def request_token(self, email='anna@example.com'):
+        self.assertEqual(self.post('/auth/password-reset', email=email).status_code, 204)
+        return link_token(mail.outbox[-1], 'reset-password')
+
+    def confirm(self, token, password='new-horse-battery-staple'):
+        return self.post('/auth/password-reset/confirm', token=token, password=password)
+
+    def test_unknown_email_sends_nothing(self):
+        r = self.post('/auth/password-reset', email='nobody@example.com')
+        self.assertEqual((r.status_code, r.content, mail.outbox), (204, b'', []))
+
+    def test_bad_email_format(self):
+        r = self.post('/auth/password-reset', email='no-at-sign')
+        self.assertEqual((r.status_code, list(r.json())), (400, ['email']))
+
+    def test_email_with_link(self):
+        self.request_token(' Anna@Example.com ')
+        [message] = mail.outbox
+        self.assertEqual((message.to, message.subject), (['anna@example.com'], 'Reset your password'))
+        self.assertIn('1 hour', message.body)
+
+    def test_confirm_logs_in_and_revokes_old_sessions(self):
+        r = self.confirm(self.request_token())
+        self.assertEqual((r.status_code, set(r.json())), (200, {'access', 'refresh'}))
+        self.assertEqual(self.post('/auth/login', email='anna@example.com', password=STRONG).status_code, 401)
+        self.assertEqual(self.post('/auth/login', email='anna@example.com',
+                                   password='new-horse-battery-staple').status_code, 200)
+        self.assertEqual(self.post('/auth/refresh', refresh=self.session['refresh']).status_code, 401)
+        self.assertEqual(self.post('/auth/refresh', refresh=r.json()['refresh']).status_code, 200)
+
+    def test_token_is_one_time(self):
+        token = self.request_token()
+        self.assertEqual(self.confirm(token).status_code, 200)
+        r = self.confirm(token, 'another-horse-battery')
+        self.assertEqual((r.status_code, r.json()), (400, {'token': ['The link is invalid or has expired.']}))
+
+    def test_expired_token(self):
+        token = self.request_token()
+        with patch('django.core.signing.time.time', return_value=time.time() + 3601):
+            self.assertEqual(list(self.confirm(token).json()), ['token'])
+
+    def test_weak_password_keeps_token(self):
+        token = self.request_token()
+        r = self.confirm(token, '12345678')
+        self.assertEqual((r.status_code, list(r.json())), (400, ['password']))
+        self.assertEqual(self.confirm(token).status_code, 200)
+
+    def test_confirms_unconfirmed_email(self):
+        User.objects.filter(pk=self.user.pk).update(is_active=False)
+        self.assertEqual(self.confirm(self.request_token()).status_code, 200)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.is_active)
+
+    def test_throttled_per_ip_and_per_email(self):
+        codes = [self.post('/auth/password-reset', email=f'x{i}@example.com').status_code for i in range(6)]
+        self.assertEqual(codes, [204] * 5 + [429])
+        codes = [self.post('/auth/password-reset', ip=f'10.0.1.{i}', email='anna@example.com').status_code
+                 for i in range(6)]
+        self.assertEqual(codes, [204] * 5 + [429])
+        self.assertEqual(len(mail.outbox), 5)
+        codes = [self.confirm('bad').status_code for _ in range(11)]
+        self.assertEqual((codes[:10], codes[10]), ([400] * 10, 429))

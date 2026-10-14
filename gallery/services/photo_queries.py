@@ -101,7 +101,9 @@ class PhotoQueries:
 
     @staticmethod
     def with_is_favorite(photos: QuerySet[Photo], user) -> QuerySet[Photo]:
-        """Annotate `is_favorite` for `user` with one EXISTS subquery (no N+1); always False for anonymous."""
+        """Annotate `is_favorite` for `user` with one EXISTS subquery (no N+1); always False for anonymous.
+        Also joins `gallery`: every photo list goes through here, and PhotoSerializer shows it."""
+        photos = photos.select_related('gallery')
         if not user.is_authenticated:
             return photos.annotate(is_favorite=Value(False, output_field=BooleanField()))
         return photos.annotate(is_favorite=Exists(Favorite.objects.filter(user=user, photo=OuterRef('pk'))))
