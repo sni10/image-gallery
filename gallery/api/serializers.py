@@ -199,6 +199,7 @@ class ComplaintSerializer(serializers.Serializer):
     photoUrl = serializers.URLField(max_length=500, required=False, allow_blank=True, default='',
                                     help_text='Ссылка на фото, необязательно')
     message = serializers.CharField(min_length=10, max_length=5000, help_text='10–5000 символов')
+    captcha = serializers.CharField(max_length=2048, help_text='Токен Cloudflare Turnstile, одноразовый')
 
 
 class CollectionSerializer(serializers.ModelSerializer):
