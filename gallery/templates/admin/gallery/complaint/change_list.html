@@ -1,0 +1,32 @@
+{% extends "admin/change_list.html" %}
+{% load admin_list admin_urls %}
+{% block extrastyle %}{{ block.super }}
+<style>
+  .complaint-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; padding: 12px 0; }
+  .complaint-card { display: flex; flex-direction: column; gap: 4px; padding: 6px; border: 2px solid var(--hairline-color); border-radius: 6px; font-size: 12px; }
+  .complaint-card--new { border-color: var(--delete-button-bg); }
+  .complaint-card:has(.action-select:checked) { background: var(--selected-row); }
+  .complaint-card img, .complaint-card__nophoto { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 4px; }
+  .complaint-card__nophoto { display: grid; place-items: center; background: var(--darkened-bg); color: var(--body-quiet-color); }
+  .complaint-card__msg { color: var(--body-quiet-color); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+</style>
+{% endblock %}
+{% block result_list %}
+{% if action_form and actions_on_top and cl.show_admin_actions %}{% admin_actions %}{% endif %}
+<div class="complaint-grid">
+  {% for c in cl.result_list %}
+  {% url opts|admin_urlname:'change' c.pk as change_url %}
+  <div class="complaint-card{% if not c.handled %} complaint-card--new{% endif %}">
+    <a href="{{ change_url }}">
+      {% if c.photo %}<img src="{{ c.photo.thumb.url }}" alt="" loading="lazy">
+      {% else %}<span class="complaint-card__nophoto">{% if c.photo_url %}фото не найдено{% else %}без ссылки{% endif %}</span>{% endif %}
+    </a>
+    <label><input type="checkbox" name="_selected_action" value="{{ c.pk }}" class="action-select"> {{ c.handled|yesno:"✔ обработана,● новая" }}</label>
+    <a href="{{ change_url }}">{{ c.email }}</a>
+    <span>{{ c.created_at|date:"d.m.Y H:i" }}</span>
+    <span class="complaint-card__msg" title="{{ c.message }}">{{ c.message }}</span>
+  </div>
+  {% endfor %}
+</div>
+{% if action_form and actions_on_bottom and cl.show_admin_actions %}{% admin_actions %}{% endif %}
+{% endblock %}
