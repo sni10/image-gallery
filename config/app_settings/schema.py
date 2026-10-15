@@ -142,6 +142,14 @@ class ComplaintsSettings(Section):
     email: str = ''  # empty -> complaints are only stored (admin), no email
 
 
+class TurnstileSettings(Section):
+    """Cloudflare Turnstile captcha on POST /complaints. The site key is the frontend's, only the secret is here."""
+
+    model_config = SettingsConfigDict(env_prefix='TURNSTILE_')
+
+    secret: SecretStr = SecretStr('')  # empty -> Cloudflare's always-pass test key (dev, tests); set it in production
+
+
 class AppSettings(BaseModel):
     django: DjangoSettings
     db: DatabaseSettings
@@ -152,3 +160,4 @@ class AppSettings(BaseModel):
     email: EmailSettings
     ingest: IngestSettings
     complaints: ComplaintsSettings
+    turnstile: TurnstileSettings

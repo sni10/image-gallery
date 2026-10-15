@@ -1,4 +1,7 @@
+import json
 import logging
+import urllib.parse
+import urllib.request
 
 from django.conf import settings
 from django.core.mail import EmailMessage
@@ -6,6 +9,19 @@ from django.core.mail import EmailMessage
 from ..models import Complaint
 
 logger = logging.getLogger(__name__)
+
+SITEVERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify'
+
+
+def captcha_passed(token: str, ip: str) -> bool:
+    """Checks a Cloudflare Turnstile token. Cloudflare down or a timeout counts as not passed."""
+    data = urllib.parse.urlencode({'secret': settings.TURNSTILE_SECRET, 'response': token, 'remoteip': ip}).encode()
+    try:
+        with urllib.request.urlopen(SITEVERIFY_URL, data, timeout=5) as r:
+            return json.load(r).get('success') is True
+    except Exception:
+        logger.warning('Turnstile siteverify failed', exc_info=True)
+        return False
 
 
 class ComplaintService:

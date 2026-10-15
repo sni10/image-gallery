@@ -172,6 +172,8 @@ PASSWORD_RESET_TTL = timedelta(hours=1)  # life of the link in the "Reset your p
 TERMS_VERSION = '2026-10-12'
 
 COMPLAINTS_EMAIL = ENV.complaints.email  # POST /complaints; empty -> stored in the admin only
+# POST /complaints captcha; empty -> Cloudflare's test secret that always passes
+TURNSTILE_SECRET = ENV.turnstile.secret.get_secret_value() or '1x0000000000000000000000000000000AA'
 COMPLAINTS_RETENTION_DAYS = 1095  # promised in the privacy policy (3 years); manage.py purge_old_complaints, daily cron
 
 INGEST_API_KEY = ENV.ingest.api_key.get_secret_value()  # POST /ingest/photos; empty -> uploads off

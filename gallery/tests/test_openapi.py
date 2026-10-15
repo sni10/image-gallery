@@ -68,7 +68,7 @@ class OpenApiSchemaTest(SimpleTestCase):
     @override_settings(COMPLAINTS_EMAIL='secret-admin@example.com')
     def test_complaints_contract(self):
         self.assertEqual(self.responses('/complaints', 'post'), {'204', '400', '429'})
-        self.assertEqual(set(self.schema['components']['schemas']['Complaint']['required']), {'email', 'message'})
+        self.assertEqual(set(self.schema['components']['schemas']['Complaint']['required']), {'email', 'message', 'captcha'})
         out = StringIO()
         call_command('spectacular', stdout=out)
         self.assertNotIn('secret-admin', out.getvalue())
