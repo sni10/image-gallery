@@ -16,8 +16,9 @@ Independent of the Django project, talks only HTTP:
 
 Safe to rerun: links are stored once, done ones are skipped, errors are retried on the next run.
 The first run downloads the model (~800 MB) into the Hugging Face cache.
-GPU: PyPI torch on Windows is CPU-only; CPU handles a few thousand 400px thumbnails in minutes. For CUDA add
-`--with torch --index https://download.pytorch.org/whl/cu128` (match your CUDA) to `uv run`.
+GPU: PyPI torch on Windows is CPU-only (fine for a few thousand 400px thumbnails). NVIDIA card (driver 570+):
+    uv run --index https://download.pytorch.org/whl/cu128 custom/embed.py
+"loading ... on cuda" in the output = the GPU is used.
 """
 import argparse
 import io

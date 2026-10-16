@@ -16,12 +16,14 @@ from rest_framework.views import APIView
 
 from ..models import Category, Gallery, Photo
 from ..services import CategoryQueries, FavoriteService, GalleryQueries, PhotoQueries, PhotoService
+from ..services.recommendations import photos_in_order, similar_ids, wave_ids
 from ..services.signed_media import is_valid
 from .pagination import PageLimitPagination
 from .permissions import HasIngestKey
 from .serializers import (
     CategoryWithCountSerializer, FeedFiltersSerializer, GallerySerializer, PhotoDetailSerializer,
     PhotoIngestResultSerializer, PhotoIngestSerializer, PhotoSerializer, TagCountSerializer, TagsQuerySerializer,
+    WaveSerializer,
 )
 
 SEED_RE = re.compile(r'^[A-Za-z0-9]{1,32}$')
@@ -254,7 +256,8 @@ class PhotoDetailView(RetrieveAPIView):
 @extend_schema(
     summary='Похожие фото',
     description='Для блока «похожие» на странице фото. Без пагинации. Порядок и подбор — забота сервера '
-                '(сейчас по общим тегам, потом добавится цвет); само фото в список не входит.',
+                '(по вектору картинки и общим тегам, не больше 3 фото одной галереи; у фото без вектора — '
+                'по тегам); само фото в список не входит.',
     parameters=[PHOTO_ID, OpenApiParameter('limit', int, required=False, default=SIMILAR_LIMIT,
                                            description=f'Сколько фото, 1–{SIMILAR_MAX}')],
     responses={
@@ -272,7 +275,30 @@ class SimilarPhotoListView(APIView):
         if not 1 <= limit <= SIMILAR_MAX:
             raise ValidationError({'limit': [f'must be an integer from 1 to {SIMILAR_MAX}']})
         photo = get_object_or_404(Photo.objects.select_related('gallery'), public_id=photo_id)
-        photos = PhotoQueries.for_user(PhotoQueries.similar(photo), request.user)[:limit]
+        photos = photos_in_order(similar_ids(photo, limit), request.user)
+        return Response({'items': PhotoSerializer(photos, many=True, context={'request': request}).data})
+
+
+@extend_schema(
+    summary='Моя волна',
+    description='Бесконечная лента рекомендаций по избранному. Сервер ничего не хранит: id показанных фото фронт '
+                'передаёт в exclude. Избранное в ленту не попадает; лайк — обычный PUT /me/favorites/{id}. '
+                'Пустой список — показывать больше нечего.',
+    request=WaveSerializer,
+    responses={
+        200: inline_serializer('WavePhotos', {'items': PhotoSerializer(many=True)}),
+        400: OpenApiResponse(description='exclude длиннее 2000 или limit не от 1 до 48, например {"limit": ["..."]}'),
+        401: UNAUTHORIZED,
+    },
+)
+class WaveView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        params = WaveSerializer(data=request.data)
+        params.is_valid(raise_exception=True)
+        ids = wave_ids(request.user, params.validated_data['exclude'], params.validated_data['limit'])
+        photos = photos_in_order(ids, request.user)
         return Response({'items': PhotoSerializer(photos, many=True, context={'request': request}).data})
 
 

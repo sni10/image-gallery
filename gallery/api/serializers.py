@@ -257,6 +257,14 @@ class FeedFiltersSerializer(serializers.Serializer):
         return clean_tag(value)
 
 
+class WaveSerializer(serializers.Serializer):
+    """Body of POST /me/wave. The wave's state lives in the client: the server keeps nothing between requests."""
+
+    exclude = serializers.ListField(child=serializers.CharField(), required=False, default=list, max_length=2000,
+                                    help_text='Публичные id фото, уже показанных в этой волне; до 2000')
+    limit = serializers.IntegerField(required=False, min_value=1, max_value=48, default=24, help_text='1–48')
+
+
 def clean_tag(value: str) -> str:
     """A tag from a query string: case, a leading # and outer spaces don't matter."""
     tag = value.lstrip('#').strip().lower()

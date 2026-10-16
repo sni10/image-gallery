@@ -5,7 +5,7 @@ from .complaints import ComplaintView
 from .embeddings import EmbeddingView
 from .views import (
     CategoryListView, FavoriteListView, FavoriteView, GalleryDetailView, GalleryListView, GalleryPhotoListView,
-    PhotoDetailView, PhotoIngestView, RandomPhotoListView, SimilarPhotoListView, TagListView,
+    PhotoDetailView, PhotoIngestView, RandomPhotoListView, SimilarPhotoListView, TagListView, WaveView,
 )
 
 urlpatterns = [
@@ -19,6 +19,7 @@ urlpatterns = [
     path('galleries/<str:id>/photos', GalleryPhotoListView.as_view(), name='gallery-photos'),
     path('me/favorites', FavoriteListView.as_view(), name='favorite-list'),
     path('me/favorites/<str:photo_id>', FavoriteView.as_view(), name='favorite'),
+    path('me/wave', WaveView.as_view(), name='wave'),
     path('me/collections', CollectionListView.as_view(), name='collection-list'),
     path('me/collections/<str:id>', CollectionDetailView.as_view(), name='collection-detail'),
     path('me/collections/<str:id>/photos', CollectionPhotoListView.as_view(), name='collection-photos'),
