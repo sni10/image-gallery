@@ -9,7 +9,7 @@ x-logging: &logging
 
 services:
   db:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:0.8.7-pg16-bookworm  # Postgres 16 + pgvector (PhotoEmbedding)
     environment:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}

@@ -9,7 +9,7 @@ PATHS = {
     '/auth/register', '/auth/confirm-email', '/auth/resend-confirmation', '/auth/password-reset', '/auth/password-reset/confirm',
     '/auth/login', '/auth/refresh',
     '/auth/logout', '/auth/confirm-email-change', '/me', '/me/email', '/me/password',
-    '/me/favorites', '/me/favorites/{photo_id}', '/ingest/photos', '/complaints', '/photos/{photo_id}/similar',
+    '/me/favorites', '/me/favorites/{photo_id}', '/ingest/photos', '/ingest/embeddings', '/complaints', '/photos/{photo_id}/similar',
     '/me/collections', '/me/collections/{id}', '/me/collections/{id}/photos', '/me/collections/{id}/photos/{photo_id}',
     '/tags',
 }

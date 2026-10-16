@@ -4,6 +4,7 @@ from django.contrib.postgres.indexes import GinIndex, OpClass
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models.functions import Upper
+from pgvector.django import VectorField
 
 from common.models import PublicIdModel
 
@@ -83,6 +84,21 @@ class Photo(PublicIdModel):
 
     def __str__(self):
         return self.title
+
+
+class PhotoEmbedding(models.Model):
+    """Image vector for visual similarity. Computed off-server (embed_photos.py on the owner's PC), sent through
+    the ingest API. One per photo: a new `model` overwrites it, vectors of different models are never compared."""
+
+    DIMENSIONS = 768  # SigLIP 2 ViT-B/16
+
+    photo = models.OneToOneField(Photo, on_delete=models.CASCADE, primary_key=True, related_name='embedding')
+    model = models.CharField(max_length=100, help_text='Имя модели, которой посчитан вектор')
+    vector = VectorField(dimensions=DIMENSIONS)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f'{self.photo_id}: {self.model}'
 
 
 class Favorite(models.Model):

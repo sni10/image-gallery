@@ -1,3 +1,4 @@
+import math
 import re
 from urllib.parse import urlsplit
 
@@ -5,7 +6,7 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from ..models import Category, Collection, Gallery, Photo
+from ..models import Category, Collection, Gallery, Photo, PhotoEmbedding
 from ..services import PhotoQueries
 from ..services.signed_media import signed_query
 
@@ -192,6 +193,24 @@ class IngestGallerySerializer(serializers.ModelSerializer):
 class PhotoIngestResultSerializer(serializers.Serializer):
     photo = PhotoSerializer()
     gallery = IngestGallerySerializer(source='photo.gallery')
+
+
+class EmbeddingSerializer(serializers.Serializer):
+    id = serializers.CharField(help_text='Публичный id фото')
+    vector = serializers.ListField(
+        child=serializers.FloatField(), min_length=PhotoEmbedding.DIMENSIONS, max_length=PhotoEmbedding.DIMENSIONS,
+        help_text=f'{PhotoEmbedding.DIMENSIONS} чисел, лучше нормированный (длина 1): сравнение по косинусу',
+    )
+
+    def validate_vector(self, value):
+        if not all(math.isfinite(x) for x in value):
+            raise serializers.ValidationError('NaN and infinity are not allowed')
+        return value
+
+
+class EmbeddingBatchSerializer(serializers.Serializer):
+    model = serializers.CharField(max_length=100, help_text='Имя модели; вектор другой модели у фото перезаписывается')
+    items = EmbeddingSerializer(many=True, allow_empty=False, max_length=500, help_text='До 500 фото за запрос')
 
 
 class ComplaintSerializer(serializers.Serializer):
