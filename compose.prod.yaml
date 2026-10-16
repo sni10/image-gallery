@@ -51,6 +51,7 @@ services:
       - "80:80"
       - "443:443"
       - "443:443/udp"
+      - "8443:8443"  # monitoring (Beszel) on secure.artai.win:8443
     environment:
       ACME_EMAIL: ${ACME_EMAIL}
     volumes:
@@ -68,6 +69,31 @@ services:
     restart: unless-stopped
     logging: *logging
 
+  # Monitoring: https://secure.artai.win:8443 (Caddy). Hub = web UI + history (own login, the first visit creates
+  # the admin); the agent reads host and container stats and talks to the hub over a unix socket, no TCP port.
+  beszel:
+    image: henrygd/beszel:0.21.0
+    environment:
+      APP_URL: https://secure.artai.win:8443
+    volumes:
+      - beszel_data:/beszel_data
+      - beszel_socket:/beszel_socket
+    restart: unless-stopped
+    logging: *logging
+
+  beszel-agent:
+    image: henrygd/beszel-agent:0.21.0
+    network_mode: host  # host network stats; listens only on the socket below
+    environment:
+      LISTEN: /beszel_socket/beszel.sock
+      KEY: ${BESZEL_KEY:-}  # hub's public key: UI -> Add system; until it is in .env the agent keeps restarting
+    volumes:
+      - beszel_agent_data:/var/lib/beszel-agent
+      - beszel_socket:/beszel_socket
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+    logging: *logging
+
 volumes:
   pgdata:
   media:
@@ -75,3 +101,6 @@ volumes:
   static:
   caddy_data:
   caddy_config:
+  beszel_data:
+  beszel_socket:
+  beszel_agent_data:

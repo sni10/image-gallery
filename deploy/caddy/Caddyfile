@@ -110,6 +110,13 @@ Disallow: /
 	import app
 }
 
+# Monitoring (Beszel hub, own login). Same certificate as secure.artai.win; ufw must allow 8443/tcp.
+secure.artai.win:8443 {
+	import hsts
+	header X-Robots-Tag "noindex, nofollow"
+	reverse_proxy beszel:8090
+}
+
 # Admin (bulk uploads go here). Closed to robots: robots.txt disallows everything, every response carries
 # X-Robots-Tag noindex, and crawlers / scripted clients get 403 before reaching the app (only browsers need the admin).
 # Restrict to own IPs later if needed: `@outside not remote_ip ...` + respond 403.
