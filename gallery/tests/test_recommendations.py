@@ -163,3 +163,16 @@ class SimilarPagesTest(TestCase):
         gone = self.vectors[0].public_id
         self.vectors[0].delete()
         self.assertNotIn(gone, [x for page in self.all_pages(24) for x in page])
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp(), MEDIA_URL='/media/')
+class WaveOneFavoriteTest(TestCase):
+    def test_one_favorite_steers_the_wave(self):
+        user = User.objects.create_user('u@example.com', 'u@example.com', 'x')
+        Favorite.objects.create(user=user, photo=embed(photo(gallery('Fav')), 0))
+        near = [embed(photo(gallery(f'N {i}')), 0.4 + i / 50) for i in range(7)]
+        far = [embed(photo(gallery(f'F {i}')), 2.5 + i / 50) for i in range(7)]
+        popular_far = far[0]
+        Favorite.objects.create(user=User.objects.create_user('o@example.com', 'o@example.com', 'x'), photo=popular_far)
+        r = self.client.post('/me/wave', {'limit': 7}, content_type='application/json', **bearer(user))
+        self.assertEqual(ids(r), [p.public_id for p in near])  # nearest first, not popular/random

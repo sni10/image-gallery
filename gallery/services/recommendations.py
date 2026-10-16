@@ -17,7 +17,7 @@ NEAR_DUPLICATE = 0.97  # cosine similarity above this = the same picture (crop, 
 PER_GALLERY = 3  # a gallery is a photo set: at most this many of one set in a list (per window in "similar")
 SIMILAR_WINDOW = 24  # "similar" pages: at most PER_GALLERY of a gallery in the first 24, 2x in the first 48, ...
 ANCHORS = 6
-WAVE_MIN_ANCHORS = 3  # fewer favorites with a vector: cold start
+WAVE_MIN_ANCHORS = 1  # no favorite with a vector: cold start (popular + random); even one favorite steers the wave
 DISCOVERY_EVERY = 8  # every 8th place of the wave is a random photo
 
 
@@ -44,7 +44,7 @@ def similar_ids(photo: Photo, limit: int, page: int = 1) -> list[int]:
 def wave_ids(user, exclude: list[str], limit: int) -> list[int]:
     """Photo pks for the next page of the user's wave. `exclude`: public ids already shown; the user's favorites
     are never shown. Round-robin over the neighbors of a few favorites, every DISCOVERY_EVERY-th place random.
-    Cold start (too few favorites with a vector): popular photos mixed with random ones."""
+    Cold start (no favorite with a vector): popular photos mixed with random ones."""
     excluded = {*Photo.objects.filter(public_id__in=exclude).values_list('pk', flat=True),
                 *Favorite.objects.filter(user=user).values_list('photo_id', flat=True)}
     anchors = _anchors(user)
