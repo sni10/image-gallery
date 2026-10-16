@@ -21,9 +21,9 @@ from ..services.signed_media import is_valid
 from .pagination import PageLimitPagination
 from .permissions import HasIngestKey
 from .serializers import (
-    CategoryWithCountSerializer, FeedFiltersSerializer, GallerySerializer, PhotoDetailSerializer,
-    PhotoIngestResultSerializer, PhotoIngestSerializer, PhotoSerializer, TagCountSerializer, TagsQuerySerializer,
-    WaveSerializer,
+    CategoryWithCountSerializer, FeedFiltersSerializer, GalleryCoverSerializer, GallerySerializer,
+    PhotoDetailSerializer, PhotoIngestResultSerializer, PhotoIngestSerializer, PhotoSerializer, TagCountSerializer,
+    TagsQuerySerializer, WaveSerializer,
 )
 
 SEED_RE = re.compile(r'^[A-Za-z0-9]{1,32}$')
@@ -34,6 +34,7 @@ GALLERY_Q_MAX = 100
 BAD_PARAMS = OpenApiResponse(description='page или limit не целое число или меньше 1, например {"page": "must be >= 1"}')
 NOT_FOUND = OpenApiResponse(description='Галереи с таким id нет (в том числе старый id после перевыпуска ссылки)')
 GALLERY_ID = OpenApiParameter('id', str, OpenApiParameter.PATH, description='Публичный id галереи (поле id), не число')
+UNAUTHORIZED = OpenApiResponse(description='Нет действующего access-токена')
 PHOTO_ID = OpenApiParameter('photo_id', str, OpenApiParameter.PATH, description='Публичный id фото (поле id), не число')
 
 
@@ -93,11 +94,31 @@ class GalleryDetailView(RetrieveAPIView):
     lookup_field = 'public_id'
     lookup_url_kwarg = 'id'
 
+    def get_permissions(self):  # reading is public, choosing the cover is for admins
+        return [IsAdminUser()] if self.request.method == 'PATCH' else super().get_permissions()
+
     def get_queryset(self):
         return GalleryQueries.with_stats()
 
     def get_object(self):
         return GalleryQueries.attach_covers([super().get_object()], self.request.user)[0]
+
+    @extend_schema(
+        summary='Поставить или снять обложку галереи',
+        description='Только для is_staff. Другие поля галереи не меняются, лишние ключи в теле игнорируются. '
+                    'Ответ — галерея целиком, как GET /galleries/{id}.',
+        request=GalleryCoverSerializer,
+        responses={200: GallerySerializer, 400: OpenApiResponse(description='Фото не из этой галереи или нет такого '
+                                                                            'фото: {"cover": ["..."]}'),
+                   401: UNAUTHORIZED, 403: OpenApiResponse(description='Пользователь не админ'), 404: NOT_FOUND},
+    )
+    def patch(self, request, id):
+        gallery = get_object_or_404(Gallery, public_id=id)
+        data = GalleryCoverSerializer(data=request.data, context={'gallery': gallery})
+        data.is_valid(raise_exception=True)
+        gallery.cover = data.validated_data['cover']
+        gallery.save(update_fields=['cover'])
+        return Response(self.get_serializer(self.get_object()).data)
 
 
 @extend_schema(
@@ -172,8 +193,6 @@ class GalleryPhotoListView(ListAPIView):
         photos = get_object_or_404(Gallery, public_id=self.kwargs['id']).photos.all()
         return PhotoQueries.for_user(photos, self.request.user)
 
-
-UNAUTHORIZED = OpenApiResponse(description='Нет действующего access-токена')
 
 
 @extend_schema(
@@ -255,14 +274,16 @@ class PhotoDetailView(RetrieveAPIView):
 
 @extend_schema(
     summary='Похожие фото',
-    description='Для блока «похожие» на странице фото. Без пагинации. Порядок и подбор — забота сервера '
-                '(по вектору картинки и общим тегам, не больше 3 фото одной галереи; у фото без вектора — '
-                'по тегам); само фото в список не входит.',
+    description='Бесконечная лента «похожие» на странице фото. Порядок и подбор — забота сервера '
+                '(по вектору картинки и общим тегам, не больше 3 фото одной галереи на каждые 24 места; у фото '
+                'без вектора — по тегам); само фото в список не входит. Порядок одинаков от запроса к запросу: '
+                'страницы не пересекаются. Пустой items — конец ленты, total не отдаётся.',
     parameters=[PHOTO_ID, OpenApiParameter('limit', int, required=False, default=SIMILAR_LIMIT,
-                                           description=f'Сколько фото, 1–{SIMILAR_MAX}')],
+                                           description=f'Сколько фото, 1–{SIMILAR_MAX}'),
+                OpenApiParameter('page', int, required=False, default=1, description='Номер страницы, с 1')],
     responses={
         200: inline_serializer('SimilarPhotos', {'items': PhotoSerializer(many=True)}),
-        400: OpenApiResponse(description='limit не целое число от 1 до 24'),
+        400: OpenApiResponse(description='limit не целое число от 1 до 24 или page не целое число от 1'),
         404: OpenApiResponse(description='Фото с таким id нет'),
     },
 )
@@ -274,8 +295,14 @@ class SimilarPhotoListView(APIView):
             limit = 0
         if not 1 <= limit <= SIMILAR_MAX:
             raise ValidationError({'limit': [f'must be an integer from 1 to {SIMILAR_MAX}']})
+        try:
+            page = int(request.query_params.get('page', 1))
+        except ValueError:
+            page = 0
+        if page < 1:
+            raise ValidationError({'page': ['must be an integer from 1']})
         photo = get_object_or_404(Photo.objects.select_related('gallery'), public_id=photo_id)
-        photos = photos_in_order(similar_ids(photo, limit), request.user)
+        photos = photos_in_order(similar_ids(photo, limit, page), request.user)
         return Response({'items': PhotoSerializer(photos, many=True, context={'request': request}).data})
 
 

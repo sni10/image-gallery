@@ -47,7 +47,9 @@ class SimilarByVectorTest(TestCase):
     def test_rules(self):
         got = self.similar(self.p)
         self.assertNotIn(self.duplicate.public_id, got)
-        self.assertEqual(sum(x.public_id in got for x in self.same_set), 3)  # the tag filler doesn't add the 4th
+        # 3 of one gallery among the rest; the 4th waits for the end, after the tag filler
+        self.assertEqual(got[-1], self.same_set[3].public_id)
+        self.assertEqual(sum(x.public_id in got[:-1] for x in self.same_set), 3)
         self.assertEqual(len(got), len(set(got)))
         # vectors first, then the tag filler: photos without a vector and of another model
         self.assertLess(got.index(self.far.public_id), got.index(self.no_vector.public_id))
@@ -107,3 +109,57 @@ class WaveTest(TestCase):
             seen += page
         # everything with a vector except the favorites and their near-duplicate
         self.assertEqual(set(seen), {p.public_id for p in self.candidates})
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp(), MEDIA_URL='/media/')
+class SimilarPagesTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.p = embed(photo(gallery('Own'), ['cat']), 0)
+        galleries = [gallery(f'G {i}') for i in range(10)]  # 4 photos each: every 4th waits for the 2nd window
+        cls.vectors = [embed(photo(galleries[k % 10]), 0.3 + k / 50) for k in range(40)]
+        cls.tags_only = [photo(gallery('Tags'), ['cat']) for _ in range(3)]
+        cls.everything = {x.public_id for x in [*cls.vectors, *cls.tags_only]}
+
+    def page(self, page=None, limit=24, p=None):
+        query = f'?limit={limit}' + (f'&page={page}' if page is not None else '')
+        r = self.client.get(f'/photos/{(p or self.p).public_id}/similar{query}')
+        self.assertEqual(r.status_code, 200)
+        return ids(r)
+
+    def all_pages(self, limit, p=None):
+        pages, n = [], 1
+        while got := self.page(n, limit, p):
+            pages.append(got)
+            n += 1
+        return pages
+
+    def test_page_one_is_default(self):
+        self.assertEqual(self.page(1), self.page())
+
+    def test_pages_are_slices_of_one_list(self):
+        pages = self.all_pages(5)
+        flat = [x for page in pages for x in page]
+        self.assertEqual(len(flat), len(set(flat)))  # no overlaps
+        self.assertEqual(flat[:24], self.page(1, 24))  # the start of the same list as a bigger limit
+        self.assertEqual(set(flat), self.everything)  # the cap queues photos, nothing is lost
+        self.assertEqual(self.page(len(pages) + 1, 5), [])  # past the end
+        first_window = [x for x in self.vectors if x.public_id in flat[:24]]
+        self.assertLessEqual(max(sum(x.gallery_id == g for x in first_window) for g in {x.gallery_id for x in first_window}), 3)
+
+    def test_no_vector_pages(self):
+        pages = self.all_pages(2, p=self.tags_only[0])
+        flat = [x for page in pages for x in page]
+        self.assertEqual(len(flat), len(set(flat)))
+        self.assertEqual(flat[:4], self.page(1, 4, p=self.tags_only[0]))
+
+    def test_bad_page(self):
+        for page in ('0', 'abc', '-1'):
+            with self.subTest(page=page):
+                r = self.client.get(f'/photos/{self.p.public_id}/similar?page={page}')
+                self.assertEqual((r.status_code, set(r.json())), (400, {'page'}))
+
+    def test_deleted_photo_never_shows(self):
+        gone = self.vectors[0].public_id
+        self.vectors[0].delete()
+        self.assertNotIn(gone, [x for page in self.all_pages(24) for x in page])

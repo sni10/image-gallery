@@ -99,10 +99,28 @@ class GallerySerializer(serializers.ModelSerializer):
         source='display_cover', read_only=True, allow_null=True,
         help_text='Выбранная обложка, иначе случайное фото галереи; null, если фото нет',
     )
+    coverId = serializers.CharField(
+        source='cover_public_id', read_only=True, allow_null=True,
+        help_text='Публичный id выбранной обложки; null — обложка не выбрана, cover тогда случайное фото',
+    )
 
     class Meta:
         model = Gallery
-        fields = ['id', 'title', 'category', 'photosCount', 'cover']
+        fields = ['id', 'title', 'category', 'photosCount', 'cover', 'coverId']
+
+
+class GalleryCoverSerializer(serializers.Serializer):
+    """Body of PATCH /galleries/{id}. Expects the gallery in the context."""
+
+    cover = serializers.CharField(allow_null=True, help_text='Публичный id фото этой галереи; null — снять обложку')
+
+    def validate_cover(self, value):
+        if value is None:
+            return None
+        photo = self.context['gallery'].photos.filter(public_id=value).first()
+        if photo is None:
+            raise serializers.ValidationError('Photo is not in this gallery.')
+        return photo
 
 
 class PhotoGallerySerializer(GalleryRefSerializer):

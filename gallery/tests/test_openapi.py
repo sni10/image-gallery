@@ -77,7 +77,11 @@ class OpenApiSchemaTest(SimpleTestCase):
         sort = next(p for p in self.schema['paths']['/photos']['get']['parameters'] if p['name'] == 'sort')
         self.assertEqual(set(sort['schema']['enum']), {'random', 'new', 'popular'})
         self.assertEqual(self.responses('/photos/{photo_id}/similar', 'get'), {'200', '400', '404'})
+        similar_params = {p['name'] for p in self.schema['paths']['/photos/{photo_id}/similar']['get']['parameters']}
+        self.assertEqual(similar_params, {'photo_id', 'limit', 'page'})
         self.assertEqual(self.responses('/me/wave', 'post'), {'200', '400', '401'})
+        self.assertEqual(self.responses('/galleries/{id}', 'patch'), {'200', '400', '401', '403', '404'})
+        self.assertIn('coverId', self.schema['components']['schemas']['Gallery']['properties'])
         self.assertEqual(self.responses('/me/collections/{id}/photos/{photo_id}', 'put'), {'204', '400', '401', '404'})
         collection = self.schema['components']['schemas']['CollectionWithCover']
         self.assertEqual(set(collection['required']), {'id', 'title', 'photosCount', 'cover'})  # hasPhoto optional

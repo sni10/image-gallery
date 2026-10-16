@@ -10,9 +10,9 @@ class GalleryQueries:
 
     @staticmethod
     def with_stats() -> QuerySet[Gallery]:
-        """Annotates `photos_count` and `display_cover_id`: the chosen cover if it still belongs
-        to the gallery, otherwise a random photo of the gallery (new on every query)."""
-        chosen_cover = Photo.objects.filter(pk=OuterRef('cover_id'), gallery=OuterRef('pk')).values('pk')[:1]
+        """Annotates `photos_count`, `display_cover_id`: the chosen cover if it still belongs to the gallery,
+        otherwise a random photo of the gallery (new on every query), and `cover_public_id`: the chosen one or None."""
+        chosen_cover = Photo.objects.filter(pk=OuterRef('cover_id'), gallery=OuterRef('pk'))
         # ponytail: ORDER BY random() per gallery scans its photos; fine for thousands per gallery,
         # switch to a random offset over an indexed column if galleries get much bigger
         random_photo = Photo.objects.filter(gallery=OuterRef('pk')).order_by('?').values('pk')[:1]
@@ -22,7 +22,8 @@ class GalleryQueries:
         )
         return Gallery.objects.select_related('category').annotate(
             photos_count=Coalesce(Subquery(photos_count), 0),
-            display_cover_id=Coalesce(Subquery(chosen_cover), Subquery(random_photo)),
+            display_cover_id=Coalesce(Subquery(chosen_cover.values('pk')[:1]), Subquery(random_photo)),
+            cover_public_id=Subquery(chosen_cover.values('public_id')[:1]),
         )
 
     @staticmethod

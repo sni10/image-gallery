@@ -9,30 +9,36 @@ from pgvector.django import CosineDistance
 from ..models import Favorite, Photo, PhotoEmbedding
 from .photo_queries import PhotoQueries
 
-CANDIDATES = 200  # nearest vectors re-scored for "similar"
+# Nearest vectors re-scored for "similar". Fixed, not grown with the page: a bigger pool re-orders the pages already
+# shown (a farther photo with shared tags can outscore a nearer one). Beyond it the tag filler continues.
+CANDIDATES = 1000
 VECTOR_WEIGHT, TAG_WEIGHT = 0.75, 0.25
 NEAR_DUPLICATE = 0.97  # cosine similarity above this = the same picture (crop, re-save, small variation)
-PER_GALLERY = 3  # a gallery is a photo set: at most this many of one set in a list
+PER_GALLERY = 3  # a gallery is a photo set: at most this many of one set in a list (per window in "similar")
+SIMILAR_WINDOW = 24  # "similar" pages: at most PER_GALLERY of a gallery in the first 24, 2x in the first 48, ...
 ANCHORS = 6
 WAVE_MIN_ANCHORS = 3  # fewer favorites with a vector: cold start
 DISCOVERY_EVERY = 8  # every 8th place of the wave is a random photo
 
 
-def similar_ids(photo: Photo, limit: int) -> list[int]:
-    """Photo pks for the "similar" block: nearest by vector re-scored with shared tags, no near-duplicates, at most
-    PER_GALLERY per gallery; filled up by tags. No vector: by tags only, exactly as before vectors."""
+def similar_ids(photo: Photo, limit: int, page: int = 1) -> list[int]:
+    """Photo pks for one page of the "similar" feed: nearest by vector re-scored with shared tags, no
+    near-duplicates, then the tag filler; the per-gallery cap grows by SIMILAR_WINDOW. No vector: by tags only.
+    No randomness: every request builds the same list, a page is its slice, so pages never overlap."""
+    start, end = (page - 1) * limit, page * limit
     by_tags = PhotoQueries.similar(photo)
     if not (embedding := PhotoEmbedding.objects.filter(photo=photo).first()):
-        return list(by_tags.values_list('pk', flat=True)[:limit])
+        return list(by_tags.values_list('pk', flat=True)[start:end])
     rows = _nearest(embedding, CANDIDATES, Q(photo=photo))
     tags = set(photo.tags)
     scored = sorted(((VECTOR_WEIGHT * cos + TAG_WEIGHT * _jaccard(tags, set(row_tags)), pk, gallery)
                      for pk, gallery, row_tags, cos in rows if cos <= NEAR_DUPLICATE), reverse=True)
-    picker = _Picker(limit, banned={pk for pk, _, _, cos in rows if cos > NEAR_DUPLICATE})
+    picker = _Picker(end, banned={pk for pk, _, _, cos in rows if cos > NEAR_DUPLICATE}, window=SIMILAR_WINDOW)
     picker.fill(iter((pk, gallery) for _, pk, gallery in scored))
-    # ponytail: the filler walks at most 4*limit tag matches, so the gallery cap can leave the list a bit short
-    picker.fill(iter(by_tags.exclude(pk__in=picker.banned).values_list('pk', 'gallery_id')[:limit * 4]))
-    return picker.ids
+    # ponytail: the filler walks every photo (tag overlap per row, as before); cache the list if deep pages get slow
+    picker.fill(iter(by_tags.exclude(pk__in=picker.banned).values_list('pk', 'gallery_id')))
+    picker.flush()
+    return picker.ids[start:]
 
 
 def wave_ids(user, exclude: list[str], limit: int) -> list[int]:
@@ -68,7 +74,7 @@ def photos_in_order(ids: list[int], user) -> list[Photo]:
 def _nearest(embedding: PhotoEmbedding, n: int, exclude: Q) -> list[tuple[int, int, list[str], float]]:
     """(photo pk, gallery id, tags, cosine similarity) of the n nearest vectors of the same model."""
     rows = (PhotoEmbedding.objects.filter(model=embedding.model).exclude(exclude)
-            .annotate(distance=CosineDistance('vector', embedding.vector)).order_by('distance')
+            .annotate(distance=CosineDistance('vector', embedding.vector)).order_by('distance', 'photo_id')
             .values_list('photo_id', 'photo__gallery_id', 'photo__tags', 'distance')[:n])
     return [(pk, gallery, tags, 1 - distance) for pk, gallery, tags, distance in rows]
 
@@ -102,25 +108,52 @@ def _jaccard(a: set, b: set) -> float:
 
 
 class _Picker:
-    """Collects photo pks in order: no repeats, nothing banned, at most PER_GALLERY per gallery."""
+    """Collects photo pks in order: no repeats, nothing banned, at most PER_GALLERY per gallery.
+    With `window`, the cap is PER_GALLERY per `window` places so far, and photos over the cap wait (in order) for
+    a later window instead of being dropped."""
 
-    def __init__(self, limit, banned=()):
+    def __init__(self, limit, banned=(), window=None):
         self.ids, self.limit, self.banned, self.per_gallery = [], limit, set(banned), Counter()
+        self.window, self.waiting = window, []
 
     @property
     def full(self):
         return len(self.ids) >= self.limit
 
+    def _fits(self, gallery):
+        windows = len(self.ids) // self.window + 1 if self.window else 1
+        return self.per_gallery[gallery] < PER_GALLERY * windows
+
+    def _add(self, pk, gallery):
+        self.banned.add(pk)
+        self.ids.append(pk)
+        self.per_gallery[gallery] += 1
+
     def take(self, rows) -> bool:
-        """Add the first acceptable (pk, gallery id) of the iterator; False when it ran dry."""
-        for pk, gallery in rows:
-            if pk not in self.banned and self.per_gallery[gallery] < PER_GALLERY:
-                self.banned.add(pk)
-                self.ids.append(pk)
-                self.per_gallery[gallery] += 1
+        """Add the first acceptable (pk, gallery id): a waiting one that fits now, else from the iterator;
+        False when nothing fits and the iterator ran dry."""
+        for i, (pk, gallery) in enumerate(self.waiting):
+            if self._fits(gallery):
+                del self.waiting[i]
+                self._add(pk, gallery)
                 return True
+        for pk, gallery in rows:
+            if pk in self.banned:
+                continue
+            if self._fits(gallery):
+                self._add(pk, gallery)
+                return True
+            if self.window:
+                self.banned.add(pk)  # queued: later rows must not add it twice
+                self.waiting.append((pk, gallery))
         return False
 
     def fill(self, rows):
         while not self.full and self.take(rows):
             pass
+
+    def flush(self):
+        """All sources ran dry: the waiting photos (big galleries) close the list in order, past the cap, so the
+        feed loses nothing; they just come last."""
+        while not self.full and self.waiting:
+            self._add(*self.waiting.pop(0))
