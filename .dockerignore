@@ -15,4 +15,4 @@ htmlcov
 deploy/
 .env*.example
 # runs on the owner's PC, not in the server image
-embed_photos.py
+custom/

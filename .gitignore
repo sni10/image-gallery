@@ -13,3 +13,6 @@ htmlcov/
 .claude/settings.local.json
 
 server-credentials.txt
+
+# custom/embed.py link queue (local state)
+custom/*.sqlite

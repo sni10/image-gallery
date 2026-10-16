@@ -87,7 +87,7 @@ class Photo(PublicIdModel):
 
 
 class PhotoEmbedding(models.Model):
-    """Image vector for visual similarity. Computed off-server (embed_photos.py on the owner's PC), sent through
+    """Image vector for visual similarity. Computed off-server (custom/embed.py on the owner's PC), sent through
     the ingest API. One per photo: a new `model` overwrites it, vectors of different models are never compared."""
 
     DIMENSIONS = 768  # SigLIP 2 ViT-B/16
