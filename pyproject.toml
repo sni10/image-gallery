@@ -8,6 +8,7 @@ dependencies = [
     "djangorestframework>=3.18.3",
     "drf-spectacular>=0.30.0",
     "gunicorn>=26.2.0",
+    "pgvector>=0.4.1",
     "pillow>=12.3.0",
     "psycopg2-binary>=2.9.13",
     "pydantic-settings>=2.15.0",

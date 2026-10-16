@@ -38,7 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       db:
-        image: postgres:16-alpine
+        image: pgvector/pgvector:0.8.7-pg16-bookworm
         env:
           POSTGRES_DB: image_gallery
           POSTGRES_USER: ci

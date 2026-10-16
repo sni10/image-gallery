@@ -14,3 +14,5 @@ htmlcov
 *.md
 deploy/
 .env*.example
+# runs on the owner's PC, not in the server image
+custom/

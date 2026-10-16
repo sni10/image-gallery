@@ -1,11 +1,13 @@
 # All settings come from .env (see .env.example).
 services:
   db:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:0.8.7-pg16-bookworm  # Postgres 16 + pgvector (PhotoEmbedding)
     environment:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "127.0.0.1:5432:5432"  # dev: IDE/DB client access
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
