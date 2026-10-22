@@ -1,4 +1,4 @@
-from rest_framework.throttling import ScopedRateThrottle
+from rest_framework.throttling import ScopedRateThrottle, SimpleRateThrottle
 
 
 class IPScopedRateThrottle(ScopedRateThrottle):
@@ -6,6 +6,19 @@ class IPScopedRateThrottle(ScopedRateThrottle):
 
     def get_cache_key(self, request, view):
         return self.cache_format % {'scope': self.scope, 'ident': self.get_ident(request)}
+
+
+class OriginalsBurstThrottle(SimpleRateThrottle):
+    """Originals per client IP: a mass downloader (dozens of parallel fetches) hits this in seconds, a viewer never."""
+    scope = 'original_burst'
+
+    def get_cache_key(self, request, view):
+        return self.cache_format % {'scope': self.scope, 'ident': self.get_ident(request)}
+
+
+class OriginalsThrottle(OriginalsBurstThrottle):
+    """The same per hour: a slow crawler that stays under the burst limit."""
+    scope = 'original'
 
 
 class EmailScopedRateThrottle(ScopedRateThrottle):

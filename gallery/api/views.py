@@ -14,6 +14,8 @@ from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from accounts.throttling import OriginalsBurstThrottle, OriginalsThrottle
+
 from ..models import Category, Gallery, Photo
 from ..services import CategoryQueries, FavoriteService, GalleryQueries, PhotoQueries, PhotoService
 from ..services.recommendations import photos_in_order, similar_ids, wave_ids
@@ -406,4 +408,8 @@ def media_auth(request):
     uri = urlsplit(request.headers.get('X-Forwarded-Uri', ''))
     query = parse_qs(uri.query)
     exp, sig = (query.get(key, [None])[-1] for key in ('exp', 'sig'))
-    return HttpResponse(status=204 if is_valid(uri.path, exp, sig) else 403)
+    if not is_valid(uri.path, exp, sig):
+        return HttpResponse(status=403)
+    # mass download guard, per client IP (Caddy sends it in X-Forwarded-For); Caddy passes the 429 to the client
+    allowed = all(throttle().allow_request(request, None) for throttle in (OriginalsBurstThrottle, OriginalsThrottle))
+    return HttpResponse(status=204 if allowed else 429)

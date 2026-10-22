@@ -214,6 +214,9 @@ REST_FRAMEWORK = {
                                            'delete_account', 'password_reset_confirm')},
         'complaint': '5/hour',
         'password_reset': '5/hour',  # per IP and, separately, per email (EmailScopedRateThrottle)
+        # originals per IP (media_auth). Browsers cache an original for an hour, so revisits don't count
+        'original_burst': '60/min',
+        'original': '600/hour',
     },
     # The app runs behind exactly one proxy (Caddy): it sends one X-Forwarded-For value, the client IP
     'NUM_PROXIES': 1,

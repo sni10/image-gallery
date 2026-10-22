@@ -31,6 +31,7 @@
 	handle /media/original/* {
 		forward_auth app:8000 {
 			uri /internal/media-auth
+			header_up X-Forwarded-For {client_ip}  # the per-IP originals limit needs the client, not Cloudflare
 		}
 		root * /srv
 		header Cache-Control "private, max-age=3600"

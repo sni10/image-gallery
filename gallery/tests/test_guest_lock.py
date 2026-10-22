@@ -1,11 +1,14 @@
 import tempfile
 import time
+from unittest.mock import patch
 from urllib.parse import urlsplit
 
 from django.contrib.auth.models import User
+from django.core.cache import cache
 from django.test import TestCase, override_settings
 
 from accounts.services.access_tokens import AccessTokenService
+from accounts.throttling import OriginalsBurstThrottle
 
 from ..services import PhotoService
 from ..services.signed_media import signed_query
@@ -110,6 +113,16 @@ class MediaAuthTest(TestCase):
         for uri in (f'{self.path}?{bad}', f'/media/original/00/00/other.jpg?{self.query}',
                     f'{self.path}?{expired}', self.path, ''):
             self.assertEqual(self.check(uri), 403, uri)
+
+    def test_mass_download_limited_per_ip(self):
+        cache.clear()  # throttle counters
+        self.addCleanup(cache.clear)
+        uri = f'{self.path}?{self.query}'
+        with patch.object(OriginalsBurstThrottle, 'THROTTLE_RATES', {'original_burst': '3/min', 'original': '100/hour'}):
+            codes = [self.check(uri) for _ in range(4)]
+            other_ip = self.client.get('/internal/media-auth', HTTP_X_FORWARDED_URI=uri,
+                                       HTTP_X_FORWARDED_FOR='10.0.0.2').status_code
+        self.assertEqual((codes, other_ip), ([204, 204, 204, 429], 204))
 
     def test_link_stable_within_an_hour(self):
         hour = 3600 * 500_000
