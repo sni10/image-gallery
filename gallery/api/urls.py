@@ -3,6 +3,7 @@ from django.urls import path
 from .collections import CollectionDetailView, CollectionListView, CollectionPhotoListView, CollectionPhotoView
 from .complaints import ComplaintView
 from .embeddings import EmbeddingView
+from .texts import GalleryTextView, PhotoTextView
 from .views import (
     CategoryListView, FavoriteListView, FavoriteView, GalleryDetailView, GalleryListView, GalleryPhotoListView,
     PhotoDetailView, PhotoIngestView, RandomPhotoListView, SimilarPhotoListView, TagListView, WaveView,
@@ -25,6 +26,8 @@ urlpatterns = [
     path('me/collections/<str:id>/photos', CollectionPhotoListView.as_view(), name='collection-photos'),
     path('me/collections/<str:id>/photos/<str:photo_id>', CollectionPhotoView.as_view(), name='collection-photo'),
     path('ingest/photos', PhotoIngestView.as_view(), name='photo-ingest'),
+    path('ingest/photos/<str:photo_id>', PhotoTextView.as_view(), name='photo-text'),
+    path('ingest/galleries/<str:id>', GalleryTextView.as_view(), name='gallery-text'),
     path('ingest/embeddings', EmbeddingView.as_view(), name='embeddings'),
     path('complaints', ComplaintView.as_view(), name='complaints'),
 ]

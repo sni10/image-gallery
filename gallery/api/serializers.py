@@ -106,7 +106,8 @@ class GallerySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Gallery
-        fields = ['id', 'title', 'category', 'photosCount', 'cover', 'coverId']
+        fields = ['id', 'title', 'description', 'category', 'photosCount', 'cover', 'coverId']
+        extra_kwargs = {'description': {'help_text': 'SEO-текст страницы галереи, может быть пустым'}}
 
 
 class GalleryCoverSerializer(serializers.Serializer):
@@ -161,6 +162,17 @@ TAG_SEPARATORS = re.compile(r'[,\n]')
 MAX_TAGS, MAX_TAG_LENGTH = 30, 50
 
 
+def clean_tags(items) -> list[str]:
+    """Lower case, without # and duplicates; at most MAX_TAGS tags of MAX_TAG_LENGTH chars."""
+    tags = list(dict.fromkeys(t.strip().lstrip('#').strip().lower() for t in items))
+    tags = [t for t in tags if t]
+    if too_long := [t for t in tags if len(t) > MAX_TAG_LENGTH]:
+        raise serializers.ValidationError(f'Tags longer than {MAX_TAG_LENGTH} chars: {", ".join(too_long)}')
+    if len(tags) > MAX_TAGS:
+        raise serializers.ValidationError(f'At most {MAX_TAGS} tags, got {len(tags)}')
+    return tags
+
+
 class PhotoIngestSerializer(serializers.Serializer):
     """Input of POST /ingest/photos. Choose the gallery by `gallery` or by `category` + `galleryTitle`."""
 
@@ -180,13 +192,7 @@ class PhotoIngestSerializer(serializers.Serializer):
     )
 
     def validate_tags(self, value):
-        tags = list(dict.fromkeys(t.strip().lstrip('#').strip().lower() for t in TAG_SEPARATORS.split(value)))
-        tags = [t for t in tags if t]
-        if too_long := [t for t in tags if len(t) > MAX_TAG_LENGTH]:
-            raise serializers.ValidationError(f'Tags longer than {MAX_TAG_LENGTH} chars: {", ".join(too_long)}')
-        if len(tags) > MAX_TAGS:
-            raise serializers.ValidationError(f'At most {MAX_TAGS} tags, got {len(tags)}')
-        return tags
+        return clean_tags(TAG_SEPARATORS.split(value))
 
     def validate(self, attrs):
         by_id = 'gallery' in attrs
@@ -229,6 +235,23 @@ class EmbeddingSerializer(serializers.Serializer):
 class EmbeddingBatchSerializer(serializers.Serializer):
     model = serializers.CharField(max_length=100, help_text='Имя модели; вектор другой модели у фото перезаписывается')
     items = EmbeddingSerializer(many=True, allow_empty=False, max_length=500, help_text='До 500 фото за запрос')
+
+
+class PhotoTextSerializer(serializers.Serializer):
+    """Input of PATCH /ingest/photos/{id}: only the given fields change."""
+
+    title = serializers.CharField(required=False, allow_blank=True, max_length=200)
+    description = serializers.CharField(required=False, allow_blank=True, max_length=5000)
+    tags = serializers.ListField(child=serializers.CharField(allow_blank=True), required=False,
+                                 help_text=f'Заменяют теги фото; нижний регистр, без # и дублей, '
+                                           f'не больше {MAX_TAGS} по {MAX_TAG_LENGTH} символов')
+
+    def validate_tags(self, value):
+        return clean_tags(value)
+
+
+class GalleryTextSerializer(serializers.Serializer):
+    description = serializers.CharField(allow_blank=True, max_length=5000)
 
 
 class ComplaintSerializer(serializers.Serializer):

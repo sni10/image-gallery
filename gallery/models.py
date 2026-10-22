@@ -30,6 +30,7 @@ class Category(PublicIdModel):
 
 class Gallery(PublicIdModel):
     title = models.CharField(max_length=200)
+    description = models.TextField(blank=True, default='', help_text='SEO-текст страницы галереи')
     category = models.ForeignKey(
         Category, on_delete=models.PROTECT, related_name='galleries', verbose_name='Категория',
     )

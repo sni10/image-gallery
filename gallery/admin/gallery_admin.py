@@ -13,7 +13,7 @@ from .forms import GalleryAdminForm
 @admin.register(Gallery)
 class GalleryAdmin(ReissueLinkAdminMixin, admin.ModelAdmin):
     form = GalleryAdminForm
-    fields = ['title', 'category', 'link_date', 'public_id', 'new_images']  # photo grid: change_form template
+    fields = ['title', 'description', 'category','link_date', 'public_id', 'new_images']  # photo grid: change_form template
     readonly_fields = ['public_id']
     actions = ['reissue_links']
     list_display = ['id', 'cover_preview', 'title', 'category', 'photos_count', 'created_at']
