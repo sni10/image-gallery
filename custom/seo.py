@@ -11,9 +11,11 @@ Independent of the Django project, talks only HTTP:
   3. galleries: for each gallery with done photos: its photo texts -> LLM -> description ->
      PATCH /ingest/galleries/<id>. Redone when the gallery has more done photos than last time.
 
-    INGEST_API_KEY=... uv run custom/seo.py                    # production: collect + photos + galleries
-    INGEST_API_KEY=... uv run custom/seo.py photos             # only the photo queue, no sitemap
-    INGEST_API_KEY=... uv run custom/seo.py --model google/gemma-4-e4b --lm http://localhost:1234
+    uv run custom/seo.py                    # production: collect + photos + galleries
+    uv run custom/seo.py photos             # only the photo queue, no sitemap
+    uv run custom/seo.py --model google/gemma-4-e4b --lm http://localhost:1234
+
+INGEST_API_KEY: from the environment, else from the repo's .env (must be the production key for production).
 
 Safe to rerun: done photos are skipped, errors are retried on the next run. To redo everything delete seo.sqlite.
 LM Studio loads the model on the first request (the model must accept images).
@@ -25,6 +27,7 @@ import json
 import os
 import sqlite3
 import sys
+import time
 import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -69,7 +72,11 @@ def http(url, key=None, body=None, method=None, timeout=60):
 def llm(lm, model, content, schema):
     body = {'model': model, 'temperature': 0.5, 'messages': [{'role': 'user', 'content': content}],
             'response_format': {'type': 'json_schema', 'json_schema': {'name': 'seo', 'strict': True, 'schema': schema}}}
+    print(f'    llm: {model} ...', end=' ', flush=True)
+    started = time.monotonic()
     answer = json.loads(http(f'{lm}/v1/chat/completions', body=body, timeout=600))  # first call loads the model
+    usage = answer.get('usage') or {}
+    print(f'{time.monotonic() - started:.0f}s, tokens in {usage.get("prompt_tokens")} out {usage.get("completion_tokens")}')
     message = answer['choices'][0]['message']
     # thinking models (qwen3.5) in LM Studio put the schema-constrained JSON into reasoning_content
     return json.loads(message.get('content') or message.get('reasoning_content') or '')
@@ -78,10 +85,14 @@ def llm(lm, model, content, schema):
 def jpeg_base64(url):
     from PIL import Image
 
-    image = Image.open(io.BytesIO(http(url))).convert('RGB')
+    raw = http(url)
+    image = Image.open(io.BytesIO(raw)).convert('RGB')
+    size = image.size
     image.thumbnail((IMAGE_SIDE, IMAGE_SIDE))
     buf = io.BytesIO()
     image.save(buf, 'JPEG', quality=85)
+    print(f'    image: {len(raw) // 1024} KB {size[0]}x{size[1]} -> JPEG {buf.tell() // 1024} KB '
+          f'{image.size[0]}x{image.size[1]}')
     return base64.b64encode(buf.getvalue()).decode()
 
 
@@ -120,26 +131,36 @@ def photos(db, api, key, lm, model):
     print(f'photos: {len(todo)} in the queue')
     for n, url in enumerate(todo, 1):
         photo_id = url.rstrip('/').rsplit('/', 1)[-1]
+        print(f'\n[{n}/{len(todo)}] {url}')
         try:
-            photo = json.loads(http(f'{api}/photos/{photo_id}'))
+            try:
+                photo = json.loads(http(f'{api}/photos/{photo_id}', key))  # the key opens locked originals
+            except urllib.error.HTTPError as exc:
+                if exc.code != 404:
+                    raise
+                print('    gone: the photo was deleted')
+                mark(db, url, 'gone', str(exc))
+                continue
+            print(f'    gallery: {photo["gallery"]["title"]} | old title: {photo["title"]}')
+            image = jpeg_base64(photo['url'])
             text = llm(lm, model, [
                 {'type': 'text', 'text': PHOTO_PROMPT.format(gallery=photo['gallery']['title'])},
-                {'type': 'image_url', 'image_url': {'url': f'data:image/jpeg;base64,{jpeg_base64(photo["url"])}'}},
+                {'type': 'image_url', 'image_url': {'url': f'data:image/jpeg;base64,{image}'}},
             ], PHOTO_SCHEMA)
             text = {'title': text['title'].strip().strip('"')[:200], 'description': text['description'].strip()[:5000],
                     'tags': [t.strip().lower().replace(' ', '_')[:50] for t in text['tags']][:30]}
+            print(f'    title: {text["title"]}\n    tags: {", ".join(text["tags"])}\n    description: {text["description"]}')
             http(f'{api}/ingest/photos/{photo_id}', key, text, method='PATCH')
-        except urllib.error.HTTPError as exc:
-            mark(db, url, 'gone' if exc.code == 404 else 'error', f'{exc} {exc.read()[:300]!r}')
-            continue
-        except Exception as exc:  # one bad answer must not stop the run
-            mark(db, url, 'error', repr(exc))
+            print('    saved')
+        except Exception as exc:  # one bad photo must not stop the run; retried on the next run
+            detail = f' {exc.read()[:300]!r}' if isinstance(exc, urllib.error.HTTPError) else ''
+            print(f'    ERROR: {exc!r}{detail}')
+            mark(db, url, 'error', f'{exc!r}{detail}')
             continue
         with db:
             db.execute("""UPDATE photos SET status = 'done', error = NULL, gallery = ?, gallery_title = ?, title = ?,
                           description = ?, updated_at = CURRENT_TIMESTAMP WHERE url = ?""",
                        (photo['gallery']['id'], photo['gallery']['title'], text['title'], text['description'], url))
-        print(f'  {n}/{len(todo)} {text["title"]}')
 
 
 def galleries(db, api, key, lm, model):
@@ -151,16 +172,24 @@ def galleries(db, api, key, lm, model):
         rows = db.execute('SELECT title, description FROM photos WHERE gallery = ? AND status = ? ORDER BY random() '
                           'LIMIT ?', (gallery, 'done', GALLERY_SAMPLE)).fetchall()
         listing = '\n'.join(f'- {t}: {d}' for t, d in rows)
+        print(f'\n[gallery] {title} ({gallery}): {count} done photos, {len(rows)} in the prompt')
         try:
             text = llm(lm, model, GALLERY_PROMPT.format(gallery=title, photos=listing), GALLERY_SCHEMA)
             http(f'{api}/ingest/galleries/{gallery}', key, {'description': text['description'].strip()[:5000]},
                  method='PATCH')
         except Exception as exc:  # retried on the next run: the row is not saved
-            print(f'  {title}: {exc!r}')
+            print(f'    ERROR: {exc!r}')
             continue
         with db:
             db.execute('INSERT OR REPLACE INTO galleries (id, photos) VALUES (?, ?)', (gallery, count))
-        print(f'  {title}: {count} photos')
+        print(f'    description: {text["description"]}\n    saved')
+
+
+def env_file_key():
+    env = Path(__file__).resolve().parent.parent / '.env'
+    lines = env.read_text(encoding='utf-8').splitlines() if env.exists() else []
+    return next((line.split('=', 1)[1].strip().strip('"\'') for line in lines
+                 if line.startswith('INGEST_API_KEY=')), '')
 
 
 def main():
@@ -171,9 +200,9 @@ def main():
     parser.add_argument('--lm', default='http://192.168.31.171:1234', help='LM Studio base URL')
     parser.add_argument('--model', default='qwen/qwen3.5-9b', help='LM Studio model id, must accept images')
     args = parser.parse_args()
-    key = os.environ.get('INGEST_API_KEY', '')
+    key = os.environ.get('INGEST_API_KEY') or env_file_key()
     if args.step != 'collect' and not key:
-        sys.exit('INGEST_API_KEY is not set')
+        sys.exit('INGEST_API_KEY is not set (environment or .env)')
     db = connect()
     api, lm = args.api.rstrip('/'), args.lm.rstrip('/')
     if args.step in ('all', 'collect'):

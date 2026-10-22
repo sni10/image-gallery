@@ -28,6 +28,14 @@ class TextApiTest(TestCase):
         self.assertEqual(self.patch(f'/ingest/galleries/{self.g.public_id}', {'description': 'Neon cats'}).status_code, 204)
         self.assertEqual(self.client.get(f'/galleries/{self.g.public_id}').json()['description'], 'Neon cats')
 
+    def test_key_opens_locked_original(self):
+        for _ in range(10):  # a guest sees the 10 newest photos of a gallery: self.p is locked
+            photo(self.g)
+        url = f'/photos/{self.p.public_id}'
+        self.assertIsNone(self.client.get(url).json()['url'])
+        self.assertIsNone(self.client.get(url, headers={'X-Api-Key': 'wrong'}).json()['url'])
+        self.assertIsNotNone(self.client.get(url, headers={'X-Api-Key': KEY}).json()['url'])
+
     def test_errors(self):
         url = f'/ingest/photos/{self.p.public_id}'
         self.assertEqual(self.patch(url, {'title': 'x'}, key='wrong').status_code, 403)

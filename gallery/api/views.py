@@ -247,9 +247,16 @@ class PhotoDetailView(RetrieveAPIView):
         photos = Photo.objects.select_related('gallery__category')
         return PhotoQueries.for_user(photos, self.request.user)
 
+    def get_object(self):
+        photo = super().get_object()
+        if HasIngestKey().has_permission(self.request, self):  # custom/seo.py feeds originals to its LLM
+            photo.locked = False
+        return photo
+
     @extend_schema(
         summary='Фото',
-        description='Для страницы фото: фото, его галерея и категория.',
+        description='Для страницы фото: фото, его галерея и категория. С `X-Api-Key` (INGEST_API_KEY) фото '
+                    'всегда открыто: url есть и у закрытых для гостя.',
         parameters=[PHOTO_ID],
         responses={200: PhotoDetailSerializer,
                    404: OpenApiResponse(description='Фото с таким id нет (в том числе старый id после перевыпуска)')},
