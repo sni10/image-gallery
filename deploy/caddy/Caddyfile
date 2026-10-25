@@ -142,3 +142,6 @@ Disallow: /
 		import app
 	}
 }
+
+# Other sites on this server, each from its own repo: renews.me = agregator-backend/deploy/caddy/renews.caddy
+import /etc/caddy/sites/*.caddy

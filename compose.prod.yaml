@@ -60,9 +60,13 @@ services:
       - static:/srv/static:ro
       - caddy_data:/data
       - caddy_config:/config
+      # Other sites on this server (renews.me: repo agregator-backend, /srv/renews): their Caddy files and images
+      - /srv/renews/caddy:/etc/caddy/sites:ro
+      - renews_media:/srv/renews-media:ro
     networks:
       default:
         aliases: [api.artai.win]  # the front container reaches the API via Caddy without leaving the server
+      edge: {}  # renews-app, renews-front
     depends_on:
       - app
       - front
@@ -104,3 +108,9 @@ volumes:
   beszel_data:
   beszel_socket:
   beszel_agent_data:
+  renews_media:
+    external: true  # created by the renews stack (docker volume create renews_media)
+
+networks:
+  edge:
+    external: true  # docker network create edge: shared with the renews stack
