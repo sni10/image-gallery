@@ -169,7 +169,7 @@ PASSWORD_RESET_TTL = timedelta(hours=1)  # life of the link in the "Reset your p
 
 # Edition of the Terms of Use (artai.win/terms) a registration must accept. Change together with the
 # front's TERMS_VERSION (src/api.ts) whenever the text changes.
-TERMS_VERSION = '2026-10-12'
+TERMS_VERSION = '2026-11-22'
 
 COMPLAINTS_EMAIL = ENV.complaints.email  # POST /complaints; empty -> stored in the admin only
 # POST /complaints captcha; empty -> Cloudflare's test secret that always passes
