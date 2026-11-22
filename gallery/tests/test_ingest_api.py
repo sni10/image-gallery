@@ -5,7 +5,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from PIL import Image, PngImagePlugin
 
-from ..models import Gallery, Photo
+from ..models import Category, Gallery, Photo
 from .utils import gallery, image, jpeg, make_category
 
 KEY = 'k' * 64
@@ -78,10 +78,16 @@ class PhotoIngestApiTest(TestCase):
         # another gallery is another photo (sharing the stored file)
         self.assertEqual(self.post(image=comfy_png(), category='ai', galleryTitle='Other').status_code, 201)
 
-    def test_unknown_gallery_or_category(self):
+    def test_unknown_gallery(self):
         self.assertEqual(self.post(image=jpeg(10, 10), gallery='a' * 26).status_code, 404)
-        self.assertEqual(self.post(image=jpeg(10, 10), category='nope', galleryTitle='X').status_code, 404)
-        self.assertFalse(Gallery.objects.filter(title='X').exists())
+
+    def test_unknown_category_is_created(self):
+        self.assertEqual(self.post(image=jpeg(10, 10), category='Stock-Photos', galleryTitle='X').status_code, 201)
+        gallery = Gallery.objects.select_related('category').get(title='X')
+        self.assertEqual((gallery.category.slug, gallery.category.title), ('stock-photos', 'Stock Photos'))
+        # the same slug in any case finds that category, no second one
+        self.assertEqual(self.post(image=jpeg(11, 11), category='stock-photos', galleryTitle='X').status_code, 201)
+        self.assertEqual(Category.objects.filter(slug='stock-photos').count(), 1)
 
     def test_gallery_choice_errors(self):
         cases = [

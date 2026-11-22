@@ -357,7 +357,8 @@ class TagListView(APIView):
 @extend_schema(
     summary='Загрузить фото (автоматизация)',
     description='Для скриптов и ComfyUI. Авторизация — заголовок `X-Api-Key` (INGEST_API_KEY на сервере), не Bearer. '
-                'Галерея — по `gallery` или по `category` + `galleryTitle` (нет такой — создаётся). '
+                'Галерея — по `gallery` или по `category` + `galleryTitle` (нет такой категории или галереи — '
+                'создаётся). '
                 'Метаданные оригинала (EXIF, XMP, текст PNG) удаляются. Повтор той же картинки в ту же галерею '
                 'не создаёт дубль: 200 и уже существующее фото, присланные title/description/tags не применяются.',
     request={'multipart/form-data': PhotoIngestSerializer},
@@ -366,7 +367,7 @@ class TagListView(APIView):
         200: OpenApiResponse(PhotoIngestResultSerializer, description='Такая картинка уже есть в этой галерее'),
         400: OpenApiResponse(description='Ошибки по полям, например {"image": ["..."]} или {"tags": ["..."]}'),
         403: OpenApiResponse(description='Нет или неверный X-Api-Key, либо загрузка выключена на сервере'),
-        404: OpenApiResponse(description='Галереи с таким id или категории с таким slug нет'),
+        404: OpenApiResponse(description='Галереи с таким id нет'),
     },
     auth=[],
 )
@@ -394,7 +395,8 @@ class PhotoIngestView(APIView):
     def _gallery(fields) -> Gallery:
         if 'gallery' in fields:
             return get_object_or_404(Gallery.objects.select_related('category'), public_id=fields['gallery'])
-        category = get_object_or_404(Category, slug=fields['category'])
+        slug = fields['category'].lower()  # Category.save lower-cases slugs; look up the same way
+        category = Category.objects.get_or_create(slug=slug, defaults={'title': slug.replace('-', ' ').title()})[0]
         # ponytail: no unique (category, title); parallel first uploads could create two galleries. ComfyUI sends
         # one at a time; add a UniqueConstraint if that changes
         gallery = category.galleries.filter(title=fields['galleryTitle']).order_by('id').first()
