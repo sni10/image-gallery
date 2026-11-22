@@ -16,3 +16,5 @@ server-credentials.txt
 
 # custom/embed.py link queue (local state)
 custom/*.sqlite
+# custom/pixabay.py: uploaded ids (local state)
+custom/pixabay_done.txt
