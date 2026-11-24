@@ -76,7 +76,7 @@ services:
   # Monitoring: https://secure.artai.win:8443 (Caddy). Hub = web UI + history (own login, the first visit creates
   # the admin); the agent reads host and container stats and talks to the hub over a unix socket, no TCP port.
   beszel:
-    image: henrygd/beszel:0.21.0
+    image: henrygd/beszel:0.21.2
     environment:
       APP_URL: https://secure.artai.win:8443
     volumes:
@@ -86,7 +86,7 @@ services:
     logging: *logging
 
   beszel-agent:
-    image: henrygd/beszel-agent:0.21.0
+    image: henrygd/beszel-agent:0.21.2
     network_mode: host  # host network stats; listens only on the socket below
     environment:
       LISTEN: /beszel_socket/beszel.sock
